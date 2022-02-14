@@ -1,4 +1,4 @@
-// fibex parser
+//! Contains the FIBEX parsing.
 
 use quick_xml::{
     events::{BytesStart, Event as XmlEvent},
@@ -16,26 +16,36 @@ use std::{
 use thiserror::Error;
 use voca_rs::case::{capitalize, decapitalize};
 
+#[doc(hidden)]
 const ERROR_TAG: &str = "FIBEX Error";
 
+/// Different kinds of errors.
 #[derive(Error, Debug)]
 pub enum FibexError {
+    /// Error while parsing.
     #[error("{}: {0}", ERROR_TAG)]
     Parse(String),
+    /// Error on the model.
     #[error("{}: {0}", ERROR_TAG)]
     Model(String),
+    /// Error on the XML.
     #[error("{}: {0:?}", ERROR_TAG)]
     Xml(#[from] quick_xml::Error),
 }
 
+/// Represents a FIBEX model.
 #[derive(Debug)]
 pub struct FibexModel {
+    /// The services of the model.
     pub services: Vec<FibexServiceInterface>,
+    /// The types of the model.
     pub types: Vec<FibexTypeReference>,
+    #[doc(hidden)]
     codings: Vec<FibexTypeCoding>,
 }
 
 impl FibexModel {
+    /// Creates a new empty model.
     pub fn new() -> Self {
         FibexModel {
             services: Vec::new(),
@@ -44,6 +54,7 @@ impl FibexModel {
         }
     }
 
+    /// Returns a service from the model identified by given id and version, if any.
     pub fn get_service(
         &self,
         service_id: usize,
@@ -54,6 +65,10 @@ impl FibexModel {
         })
     }
 
+    /// Resolves referenced types within the model or returns an error.
+    ///
+    /// If strict is set to true, any unresolved reference will raise an error.
+    /// If strict is set to false, all unresolved references will be ignored.
     pub fn pack(&mut self, strict: bool) -> Result<(), FibexError> {
         let mut types: HashMap<String, FibexTypeReference> = HashMap::new();
 
@@ -110,6 +125,7 @@ impl FibexModel {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn resolve_reference(
         types: &HashMap<String, FibexTypeReference>,
         declaration: &mut FibexTypeDeclaration,
@@ -126,6 +142,7 @@ impl FibexModel {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn unresolved_reference(id_ref: &str, id: &str, strict: bool) -> Result<(), FibexError> {
         let message = format!("Unresolved reference {} at {}", id_ref, id);
 
@@ -145,17 +162,25 @@ impl Default for FibexModel {
     }
 }
 
+/// Represents a service item.
 #[derive(Debug)]
 pub struct FibexServiceInterface {
+    /// The id of the item.
     pub id: String,
+    /// The name of the item.
     pub name: String,
+    /// The servide-id of the item.
     pub service_id: usize,
+    /// The major-version of the item.
     pub major_version: usize,
+    /// The minor-version of the item.
     pub minor_version: usize,
+    /// A list of methods of the item.
     pub methods: Vec<FibexServiceMethod>,
 }
 
 impl FibexServiceInterface {
+    /// Returns the method of given method-id, if any.
     pub fn get_method(&self, method_id: usize) -> Option<&FibexServiceMethod> {
         self.methods
             .iter()
@@ -163,35 +188,50 @@ impl FibexServiceInterface {
     }
 }
 
+/// Represents a method item.
 #[derive(Debug)]
 pub struct FibexServiceMethod {
+    /// The id of the item.
     pub id: String,
+    /// The name of the item.
     pub name: String,
+    /// The method-id of the item.
     pub method_id: usize,
+    /// The optional request declaration of the item.
     pub request: Option<FibexTypeDeclaration>,
+    /// The optional response declaration of the item.
     pub response: Option<FibexTypeDeclaration>,
 }
 
 impl FibexServiceMethod {
+    /// Returns the request item of the method, if any.
     pub fn get_request(&self) -> Option<&FibexTypeDeclaration> {
         self.request.as_ref()
     }
 
+    /// Returns the response item of the method, if any.
     pub fn get_response(&self) -> Option<&FibexTypeDeclaration> {
         self.response.as_ref()
     }
 }
 
+/// Represents a type declaration.
 #[derive(Debug, Clone)]
 pub struct FibexTypeDeclaration {
+    /// The id of the item.
     pub id: String,
+    /// The name of the item.
     pub name: String,
+    /// The referenced id of the item.
     pub id_ref: String,
+    /// The optional referenced type of the item.
     pub type_ref: Option<FibexTypeReference>,
+    /// The attributes of the item.
     pub attributes: Vec<FibexTypeAttribute>,
 }
 
 impl FibexTypeDeclaration {
+    /// Returns true if this declaration uses high-to-low byte order.
     pub fn is_high_low_byte_order(&self) -> bool {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::HighLowByteOrder(value) = attribute {
@@ -202,14 +242,17 @@ impl FibexTypeDeclaration {
         true // default
     }
 
+    /// Returns true if this declaration represents an array.
     pub fn is_array(&self) -> bool {
         self.num_array_dimensions() > 0
     }
 
+    /// Returns true if this declaration represents a multi-dimensional array.
     pub fn is_multidim_array(&self) -> bool {
         self.num_array_dimensions() > 1
     }
 
+    /// Returns the number of array dimensions of the declaration.
     pub fn num_array_dimensions(&self) -> usize {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::ArrayDeclaration(dimensions) = attribute {
@@ -220,6 +263,7 @@ impl FibexTypeDeclaration {
         0
     }
 
+    /// Returns the array dimension of given index, if any.
     pub fn get_array_dimension(&self, index: usize) -> Option<&FibexArrayDimension> {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::ArrayDeclaration(dimensions) = attribute {
@@ -232,6 +276,7 @@ impl FibexTypeDeclaration {
         None
     }
 
+    /// Returns a copy of this declaration with the first array dimension removed.
     pub fn downdim_array(&self) -> Self {
         let mut declaration = self.clone();
 
@@ -246,6 +291,7 @@ impl FibexTypeDeclaration {
         declaration
     }
 
+    /// Returns the size in bytes of the associated length-field.
     pub fn get_length_field_size(&self) -> usize {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::LengthField(value) = attribute {
@@ -256,6 +302,7 @@ impl FibexTypeDeclaration {
         4 // default
     }
 
+    /// Returns the size in bytes of the associated array length-field.
     pub fn get_array_length_field_size(&self) -> usize {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::ArrayLengthField(value) = attribute {
@@ -266,6 +313,7 @@ impl FibexTypeDeclaration {
         4 // default
     }
 
+    /// Returns the size in bytes of the associated type length-field.
     pub fn get_type_length_field_size(&self) -> usize {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::TypeLengthField(value) = attribute {
@@ -276,6 +324,7 @@ impl FibexTypeDeclaration {
         4 // default
     }
 
+    /// Returns the associated bit length, if any.
     pub fn get_bit_length(&self) -> Option<usize> {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::BitLength(value) = attribute {
@@ -286,6 +335,7 @@ impl FibexTypeDeclaration {
         None
     }
 
+    /// Returns the associated minimum bit length, if any.
     pub fn get_min_bit_length(&self) -> Option<usize> {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::MinBitLength(value) = attribute {
@@ -296,6 +346,7 @@ impl FibexTypeDeclaration {
         None
     }
 
+    /// Returns the associated maximum bit length, if any.
     pub fn get_max_bit_length(&self) -> Option<usize> {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::MaxBitLength(value) = attribute {
@@ -306,6 +357,7 @@ impl FibexTypeDeclaration {
         None
     }
 
+    /// Returns the associated position of this declaration within a list.
     pub fn get_position(&self) -> usize {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::Position(value) = attribute {
@@ -316,6 +368,7 @@ impl FibexTypeDeclaration {
         0
     }
 
+    /// Returns the associated data-id of this declaration, if any.
     pub fn get_data_id(&self) -> Option<usize> {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::DataId(value) = attribute {
@@ -326,6 +379,7 @@ impl FibexTypeDeclaration {
         None
     }
 
+    /// Returns true if this declaration associates a mandatory item.
     pub fn is_mandatory(&self) -> bool {
         for attribute in &self.attributes {
             if let FibexTypeAttribute::Mandatory(value) = attribute {
@@ -337,50 +391,79 @@ impl FibexTypeDeclaration {
     }
 }
 
+/// Different kinds of type attributes.
 #[derive(Debug, Clone)]
 pub enum FibexTypeAttribute {
+    /// The attribute for the high-to-low byte order.
     HighLowByteOrder(bool),
+    /// The attribute for the length-field.
     LengthField(usize),
+    /// The attribute for the array length-field.
     ArrayLengthField(usize),
+    /// The attribute for the array declaration.
     ArrayDeclaration(Vec<FibexArrayDimension>),
+    /// The attribute for the type length-field.
     TypeLengthField(usize),
+    /// The attribute for the bit-length.
     BitLength(usize),
+    /// The attribute for the minimum bit-length.
     MinBitLength(usize),
+    /// The attribute for the maximum bit-length.
     MaxBitLength(usize),
+    /// The attribute for the position.
     Position(usize),
+    /// The attribute for the data-id.
     DataId(usize),
+    /// The attribute for the mandatory flag.
     Mandatory(bool),
 }
 
+/// Represents an array dimension.
 #[derive(Debug, Clone)]
 pub struct FibexArrayDimension {
+    /// The index of the array dimension.
     pub index: usize,
+    /// The minimum number of elements within the array dimension.
     pub min: usize,
+    /// The maximum number of elements within the array dimension.
     pub max: usize,
 }
 
 impl FibexArrayDimension {
+    /// Returns whether this dimension is dynamic.
     pub fn is_dynamic(&self) -> bool {
         self.min != self.max
     }
 }
 
+/// Represents a type reference.
 pub type FibexTypeReference = Rc<RefCell<FibexTypeInstance>>;
 
+/// Represents a type instance.
 #[derive(Debug)]
 pub struct FibexTypeInstance {
+    /// The id of the item.
     pub id: String,
+    /// The name of the item.
     pub name: String,
+    /// The datatype of the item.
     pub datatype: FibexDatatype,
+    #[doc(hidden)]
     coding_ref: Option<String>,
 }
 
+/// Different kinds of datatypes.
 #[derive(Debug)]
 pub enum FibexDatatype {
+    /// Represents an unknown datatype.
     Unknown,
+    /// Represents a primitive datatype.
     Primitive(FibexPrimitive),
+    /// Represents a complex datatype.
     Complex(FibexComplex),
+    /// Represents an enum datatype.
     Enum(FibexEnum),
+    /// Represents a string datatype.
     String(FibexString),
 }
 
@@ -390,21 +473,36 @@ impl PartialEq for FibexDatatype {
     }
 }
 
+/// Different kinds of primitive types.
 #[derive(Debug, PartialEq)]
 pub enum FibexPrimitive {
+    /// Represents an unknown primitive.
     Unknown,
+    /// Represents a bool primitive.
     Bool,
+    /// Represents an u8 primitive.
     Uint8,
+    /// Represents an u16 primitive.
     Uint16,
+    /// Represents an u24 primitive.
     Uint24,
+    /// Represents an u32 primitive.
     Uint32,
+    /// Represents an u32 primitive.
     Uint64,
+    /// Represents an i8 primitive.
     Int8,
+    /// Represents an i16 primitive.
     Int16,
+    /// Represents an i24 primitive.
     Int24,
+    /// Represents an i32 primitive.
     Int32,
+    /// Represents an i64 primitive.
     Int64,
+    /// Represents a float32 primitive.
     Float32,
+    /// Represents a float64 primitive.
     Float64,
 }
 
@@ -429,68 +527,88 @@ impl From<&str> for FibexPrimitive {
     }
 }
 
+/// Different kinds of complex types.
 #[derive(Debug)]
 pub enum FibexComplex {
+    /// Represents a struct type.
     Struct(Vec<FibexTypeDeclaration>),
+    /// Represents an optional type.
     Optional(Vec<FibexTypeDeclaration>),
+    /// Represents an union type.
     Union(Vec<FibexTypeDeclaration>),
 }
 
+/// Represents an enum type.
 #[derive(Debug)]
 pub struct FibexEnum {
+    /// The underlaying primitive of the enum.
     pub primitive: FibexPrimitive,
+    /// The elements of the enum.
     pub elements: Vec<FibexEnumDeclaration>,
 }
 
+/// Represents an enum element.
 #[derive(Debug)]
 pub struct FibexEnumDeclaration {
+    /// The name of the element.
     pub name: String,
+    /// The value of the element.
     pub value: String,
 }
 
+/// Represents a string type.
 #[derive(Debug)]
 pub struct FibexString {
+    /// The encoding of the type.
     pub encoding: FibexStringEncoding,
+    /// Flag that indicates if the type is dynamic.
     pub is_dynamic: bool,
+    /// Flag that indicates if the type has a BOM.
     pub has_bom: bool,
+    /// Flag that indicates if the type has a termination.
     pub has_termination: bool,
+    /// The optional minimum length of the type.
     pub min_length: Option<usize>,
+    /// The optional maximum length of the type.
     pub max_length: Option<usize>,
+    /// The optional bit length of the type.
     pub bit_length: Option<usize>,
 }
 
+/// Different kinds of encodings.
 #[derive(Debug, PartialEq)]
 pub enum FibexStringEncoding {
+    /// Represents an unknown encoding.
     Unknown,
+    /// Represents an UTF-8 encoding.
     UTF8,
+    /// Represents an UTF-16 encoding.
     UTF16,
 }
 
 impl From<&str> for FibexStringEncoding {
     fn from(name: &str) -> Self {
         match name {
-            STRING_ENCODING_UTF8 => FibexStringEncoding::UTF8,
-            STRING_ENCODING_UTF16 => FibexStringEncoding::UTF16,
-            STRING_ENCODING_UCS2 => FibexStringEncoding::UTF16,
+            "UTF-8" => FibexStringEncoding::UTF8,
+            "UTF-16" => FibexStringEncoding::UTF16,
+            "UCS-2" => FibexStringEncoding::UTF16, // a UTF-16 subset
             _ => FibexStringEncoding::Unknown,
         }
     }
 }
 
+/// Represents a coding.
 #[derive(Debug)]
 pub struct FibexTypeCoding {
+    /// The id of the coding.
     pub id: String,
+    /// The name of the coding.
     pub name: String,
+    /// The attributes of the coding.
     pub attributes: Vec<FibexCodingAttribute>,
 }
 
-const STRING_CATEGORY_DYNAMIC: &str = "LEADING-LENGTH-INFO-TYPE";
-const STRING_ENCODING_UTF8: &str = "UTF-8";
-const STRING_ENCODING_UTF16: &str = "UTF-16";
-const STRING_ENCODING_UCS2: &str = "UCS-2"; // subset of UTF16
-const STRING_BOM: &str = "EXPLICIT";
-const STRING_TERMINATION: &str = "ZERO";
-
+#[doc(hidden)]
 impl FibexTypeCoding {
     fn resolve(&self) -> Option<FibexDatatype> {
         if self.is_string() {
@@ -531,7 +649,7 @@ impl FibexTypeCoding {
     fn is_dynamic(&self) -> bool {
         for attribute in &self.attributes {
             if let FibexCodingAttribute::Category(value) = attribute {
-                return !value.is_empty() && (value == STRING_CATEGORY_DYNAMIC);
+                return !value.is_empty() && (value == "LEADING-LENGTH-INFO-TYPE");
             }
         }
 
@@ -551,7 +669,7 @@ impl FibexTypeCoding {
     fn has_bom(&self) -> bool {
         for attribute in &self.attributes {
             if let FibexCodingAttribute::Bom(value) = attribute {
-                return !value.is_empty() && (value == STRING_BOM);
+                return !value.is_empty() && (value == "EXPLICIT");
             }
         }
 
@@ -561,7 +679,7 @@ impl FibexTypeCoding {
     fn has_termination(&self) -> bool {
         for attribute in &self.attributes {
             if let FibexCodingAttribute::Termination(value) = attribute {
-                return !value.is_empty() && (value == STRING_TERMINATION);
+                return !value.is_empty() && (value == "ZERO");
             }
         }
 
@@ -609,44 +727,81 @@ impl FibexTypeCoding {
     }
 }
 
+/// Different kinds of coding attributes.
 #[derive(Debug, Clone)]
 pub enum FibexCodingAttribute {
+    /// The attribute for the base-type.
     BaseType(String),
+    /// The attribute for the category.
     Category(String),
+    /// The attribute for the encoding.
     Encoding(String),
+    /// The attribute for the BOM.
     Bom(String),
+    /// The attribute for the termination.
     Termination(String),
+    /// The attribute for the min-length.
     MinLength(usize),
+    /// The attribute for the max-length.
     MaxLength(usize),
+    /// The attribute for the bit-length.
     BitLength(usize),
 }
 
-mod parser {
-    use super::xml::FibexEvent;
-    use super::*;
+/// Parser for FIBEX xml.
+pub struct FibexParser;
 
-    pub struct FibexXmlParser;
-
-    impl FibexXmlParser {
-        pub fn parse<R: Read>(reader: FibexReader<BufReader<R>>) -> Result<FibexModel, FibexError> {
-            parse_fibex(reader, true)
-        }
-
-        pub fn try_parse<R: Read>(
-            reader: FibexReader<BufReader<R>>,
-        ) -> Result<FibexModel, FibexError> {
-            parse_fibex(reader, false)
-        }
+impl FibexParser {
+    /// Returns a model parsend from the given reader or an error.
+    ///
+    /// Example
+    /// ```
+    /// # use std::io::BufReader;
+    /// # use stringreader::StringReader;
+    /// # use someip_payload::fibex::*;
+    /// # let string = "";
+    /// # let input = BufReader::new(StringReader::new(string));
+    /// let reader = FibexReader::from_reader(input)?;
+    /// let model = FibexParser::parse(reader)?;
+    /// # Ok::<(), FibexError>(())
+    /// ```
+    pub fn parse<R: Read>(reader: FibexReader<BufReader<R>>) -> Result<FibexModel, FibexError> {
+        parser::parse_fibex(reader, true)
     }
 
-    fn parse_fibex<R: Read>(
+    /// Returns a model parsend from the given reader or an error,
+    /// while ignoring unresolved type references.
+    ///
+    ///
+    /// Example
+    /// ```
+    /// # use std::io::BufReader;
+    /// # use stringreader::StringReader;
+    /// # use someip_payload::fibex::*;
+    /// # let string = "";
+    /// # let input = BufReader::new(StringReader::new(string));
+    /// let reader = FibexReader::from_reader(input)?;
+    /// let model = FibexParser::try_parse(reader)?;
+    /// # Ok::<(), FibexError>(())
+    /// ```
+    pub fn try_parse<R: Read>(reader: FibexReader<BufReader<R>>) -> Result<FibexModel, FibexError> {
+        parser::parse_fibex(reader, false)
+    }
+}
+
+#[doc(hidden)]
+mod parser {
+    use super::reader::FibexEvent;
+    use super::*;
+
+    pub(super) fn parse_fibex<R: Read>(
         mut reader: FibexReader<BufReader<R>>,
         strict: bool,
     ) -> Result<FibexModel, FibexError> {
         let mut model = FibexModel::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ServiceStart(id) => {
                     let (service, mut service_types) = parse_service_interface(&mut reader, id)?;
                     model.services.push(service);
@@ -698,7 +853,7 @@ mod parser {
         let mut types: Vec<FibexTypeReference> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     service_name = Some(name);
                 }
@@ -753,7 +908,7 @@ mod parser {
         let mut types: Vec<FibexTypeReference> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     method_name = Some(name);
                 }
@@ -810,7 +965,7 @@ mod parser {
         let mut members: Vec<FibexTypeDeclaration> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::DatatypeMemberStart(id) => {
                     members.push(parse_datatype_member(reader, id)?);
                 }
@@ -844,7 +999,7 @@ mod parser {
         let mut attributes: Vec<FibexTypeAttribute> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     field_name = Some(name);
                 }
@@ -944,7 +1099,7 @@ mod parser {
         let mut method_id: Option<usize> = None;
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::MethodIdentifier(identifier) => {
                     method_id = Some(parse_number(reader, &identifier)?);
                 }
@@ -993,7 +1148,7 @@ mod parser {
         let mut codings: Vec<FibexTypeCoding> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::CodingInfoStart(id) => codings.push(parse_coding_info(reader, id)?),
                 FibexEvent::ProcessingInfoEnd => {
                     return Ok(codings);
@@ -1014,7 +1169,7 @@ mod parser {
         let mut attributes = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     coding_name = Some(name);
                 }
@@ -1080,7 +1235,7 @@ mod parser {
         let mut datatype_coding: Option<String> = None;
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     let primitive = FibexPrimitive::from(&*name);
                     if FibexPrimitive::Unknown != primitive {
@@ -1117,7 +1272,7 @@ mod parser {
         let mut members: Vec<FibexTypeDeclaration> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     datatype_name = Some(name);
                 }
@@ -1171,7 +1326,7 @@ mod parser {
         let mut attributes: Vec<FibexTypeAttribute> = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     member_name = Some(name);
                 }
@@ -1219,7 +1374,7 @@ mod parser {
         let mut elements = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ShortName(name) => {
                     enum_name = Some(name);
                 }
@@ -1256,7 +1411,7 @@ mod parser {
         let mut element_value: Option<String> = None;
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::EnumName(name) => {
                     element_name = Some(name);
                 }
@@ -1287,7 +1442,7 @@ mod parser {
         let mut max: Option<usize> = None;
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::ArrayDimensionStart => {
                     index = None;
                     min = None;
@@ -1327,7 +1482,7 @@ mod parser {
         let mut attributes = Vec::new();
 
         loop {
-            match reader.read_fibex()? {
+            match reader.read()? {
                 FibexEvent::HighLowByteOrder(value) => {
                     attributes.push(FibexTypeAttribute::HighLowByteOrder(parse_bool(
                         reader, &value,
@@ -1443,9 +1598,71 @@ mod parser {
     }
 }
 
-pub type FibexParser = parser::FibexXmlParser;
+/// Reader for FIBEX xml.
+pub struct FibexReader<B: BufRead> {
+    #[doc(hidden)]
+    reader: XmlReader<B>,
+    #[doc(hidden)]
+    buffer1: Vec<u8>,
+    #[doc(hidden)]
+    buffer2: Vec<u8>,
+}
 
-mod xml {
+impl<B: BufRead> FibexReader<B> {
+    /// Returns a new reader for the given input or an error.
+    ///
+    /// Example
+    /// ```
+    /// # use std::io::BufReader;
+    /// # use stringreader::StringReader;
+    /// # use someip_payload::fibex::*;
+    /// # let string = "";
+    /// let input = BufReader::new(StringReader::new(string));
+    /// let reader = FibexReader::from_reader(input)?;
+    /// # Ok::<(), FibexError>(())
+    /// ```
+    pub fn from_reader(input: B) -> Result<Self, FibexError> {
+        Ok(FibexReader {
+            reader: XmlReader::from_reader(input),
+            buffer1: Vec::new(),
+            buffer2: Vec::new(),
+        })
+    }
+
+    #[doc(hidden)]
+    fn read(&mut self) -> Result<reader::FibexEvent, FibexError> {
+        reader::read_fibex(&mut self.reader, &mut self.buffer1, &mut self.buffer2)
+    }
+
+    #[doc(hidden)]
+    fn position(&self) -> usize {
+        self.reader.buffer_position()
+    }
+}
+
+impl FibexReader<BufReader<File>> {
+    /// Returns a new reader for the given file or an error.
+    ///
+    /// Example
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use someip_payload::fibex::*;
+    /// # let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+    /// let file = PathBuf::from(path);
+    /// let reader = FibexReader::from_file(file)?;
+    /// # Ok::<(), FibexError>(())
+    /// ```
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, FibexError> {
+        Ok(FibexReader {
+            reader: XmlReader::from_file(path)?,
+            buffer1: Vec::new(),
+            buffer2: Vec::new(),
+        })
+    }
+}
+
+#[doc(hidden)]
+mod reader {
     use super::*;
 
     const B_ID: &[u8] = b"ID";
@@ -1518,7 +1735,7 @@ mod xml {
     const B_COMPU_METHODS: &[u8] = b"COMPU-METHODS";
 
     #[derive(Debug)]
-    pub enum FibexEvent {
+    pub(super) enum FibexEvent {
         ShortName(String),
         ServiceStart(String),
         ServiceEnd,
@@ -1579,428 +1796,299 @@ mod xml {
         Eof,
     }
 
-    pub struct FibexXmlReader<B: BufRead> {
-        reader: XmlReader<B>,
-        buffer: Vec<u8>,
-        buffer2: Vec<u8>,
-    }
-
-    impl<B: BufRead> FibexXmlReader<B> {
-        pub fn from_reader(reader: B) -> Result<Self, FibexError> {
-            Ok(FibexXmlReader {
-                reader: XmlReader::from_reader(reader),
-                buffer: Vec::new(),
-                buffer2: Vec::new(),
-            })
-        }
-
-        pub fn position(&self) -> usize {
-            self.reader.buffer_position()
-        }
-    }
-
-    impl FibexXmlReader<BufReader<File>> {
-        pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, FibexError> {
-            Ok(FibexXmlReader {
-                reader: XmlReader::from_file(path)?,
-                buffer: Vec::new(),
-                buffer2: Vec::new(),
-            })
-        }
-    }
-
-    impl<B: BufRead> FibexXmlReader<B> {
-        pub fn read_fibex(&mut self) -> Result<FibexEvent, FibexError> {
-            loop {
-                match self.reader.read_event(&mut self.buffer)? {
-                    XmlEvent::Start(ref event) => match event.local_name() {
-                        B_SHORT_NAME => {
-                            return Ok(FibexEvent::ShortName(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
+    pub(super) fn read_fibex<B: BufRead>(
+        reader: &mut XmlReader<B>,
+        buffer1: &mut Vec<u8>,
+        buffer2: &mut Vec<u8>,
+    ) -> Result<FibexEvent, FibexError> {
+        loop {
+            match reader.read_event(buffer1)? {
+                XmlEvent::Start(ref event) => match event.local_name() {
+                    B_SHORT_NAME => {
+                        return Ok(FibexEvent::ShortName(get_text(reader, buffer2, event)?));
+                    }
+                    B_SERVICE_INTERFACE => {
+                        return Ok(FibexEvent::ServiceStart(get_attribute(
+                            reader, event, B_ID,
+                        )?));
+                    }
+                    B_SERVICE_IDENTIFIER => {
+                        return Ok(FibexEvent::ServiceIdentifier(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_SERVICE_VERSION_MAJOR => {
+                        return Ok(FibexEvent::MajorVersion(get_text(reader, buffer2, event)?));
+                    }
+                    B_SERVICE_VERSION_MINOR => {
+                        return Ok(FibexEvent::MinorVersion(get_text(reader, buffer2, event)?));
+                    }
+                    B_SERVICE_METHOD => {
+                        return Ok(FibexEvent::MethodStart(get_attribute(reader, event, B_ID)?));
+                    }
+                    B_SERVICE_EVENT => {
+                        return Ok(FibexEvent::MethodStart(get_attribute(reader, event, B_ID)?));
+                    }
+                    B_SERVICE_FIELD => {
+                        return Ok(FibexEvent::FieldStart(get_attribute(reader, event, B_ID)?));
+                    }
+                    B_METHOD_IDENTIFIER => {
+                        return Ok(FibexEvent::MethodIdentifier(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_METHOD_INPUT => {
+                        return Ok(FibexEvent::MethodInputStart);
+                    }
+                    B_METHOD_INPUT_PARAMETER => {
+                        return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
+                            reader, event, B_ID,
+                        )?));
+                    }
+                    B_METHOD_OUTPUT => {
+                        return Ok(FibexEvent::MethodOutputStart);
+                    }
+                    B_METHOD_OUTPUT_PARAMETER => {
+                        return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
+                            reader, event, B_ID,
+                        )?));
+                    }
+                    B_FIELD_GETTER => {
+                        return Ok(FibexEvent::FieldGetterStart);
+                    }
+                    B_FIELD_SETTER => {
+                        return Ok(FibexEvent::FieldSetterStart);
+                    }
+                    B_FIELD_NOTIFIER => {
+                        return Ok(FibexEvent::FieldNotifierStart);
+                    }
+                    B_NOTIFICATION_IDENTIFIER => {
+                        return Ok(FibexEvent::NotificationIdentifier(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_ARRAY_DECLARATION => {
+                        return Ok(FibexEvent::ArrayDeclarationStart);
+                    }
+                    B_ARRAY_DIMENSION => {
+                        return Ok(FibexEvent::ArrayDimensionStart);
+                    }
+                    B_DIMENSION => {
+                        return Ok(FibexEvent::ArrayDimension(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_MINIMUM_SIZE => {
+                        return Ok(FibexEvent::MinimumSize(get_text(reader, buffer2, event)?));
+                    }
+                    B_MAXIMUM_SIZE => {
+                        return Ok(FibexEvent::MaximumSize(get_text(reader, buffer2, event)?));
+                    }
+                    B_UTILIZATION => {
+                        return Ok(FibexEvent::UtilizationStart);
+                    }
+                    B_HIGH_LOW_BYTE_ORDER => {
+                        return Ok(FibexEvent::HighLowByteOrder(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_LENGTH_FIELD => {
+                        return Ok(FibexEvent::LengthField(get_text(reader, buffer2, event)?));
+                    }
+                    B_ARRAY_LENGTH_FIELD => {
+                        return Ok(FibexEvent::ArrayLengthField(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_TYPE_LENGTH_FIELD => {
+                        return Ok(FibexEvent::TypeLengthField(get_text(
+                            reader, buffer2, event,
+                        )?));
+                    }
+                    B_MIN_LENGTH => {
+                        return Ok(FibexEvent::MinLength(get_text(reader, buffer2, event)?));
+                    }
+                    B_MAX_LENGTH => {
+                        return Ok(FibexEvent::MaxLength(get_text(reader, buffer2, event)?));
+                    }
+                    B_BIT_LENGTH => {
+                        return Ok(FibexEvent::BitLength(get_text(reader, buffer2, event)?));
+                    }
+                    B_MIN_BIT_LENGTH => {
+                        return Ok(FibexEvent::MinBitLength(get_text(reader, buffer2, event)?));
+                    }
+                    B_MAX_BIT_LENGTH => {
+                        return Ok(FibexEvent::MaxBitLength(get_text(reader, buffer2, event)?));
+                    }
+                    B_EVENT_GROUP => match skip(reader, buffer2, B_EVENT_GROUP)? {
+                        FibexEvent::Eou => {}
+                        FibexEvent::Eof => {
+                            return Ok(FibexEvent::Eof);
                         }
-                        B_SERVICE_INTERFACE => {
-                            return Ok(FibexEvent::ServiceStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
+                        _ => {}
+                    },
+                    B_DATATYPE => {
+                        return Ok(FibexEvent::DatatypeStart(
+                            get_attribute(reader, event, B_ID)?,
+                            get_attribute(reader, event, B_DATATYPE_TYPE)?,
+                        ));
+                    }
+                    B_DATATYPE_CLASS => {
+                        return Ok(FibexEvent::DatatypeClass(get_text(reader, buffer2, event)?));
+                    }
+                    B_DATATYPE_MEMBER => {
+                        return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
+                            reader, event, B_ID,
+                        )?));
+                    }
+                    B_POSITION => {
+                        return Ok(FibexEvent::Position(get_text(reader, buffer2, event)?));
+                    }
+                    B_DATA_ID => {
+                        return Ok(FibexEvent::DataId(get_text(reader, buffer2, event)?));
+                    }
+                    B_MANDATORY => {
+                        return Ok(FibexEvent::Mandatory(get_text(reader, buffer2, event)?));
+                    }
+                    B_ENUM => {
+                        return Ok(FibexEvent::EnumStart);
+                    }
+                    B_ENUM_NAME => {
+                        return Ok(FibexEvent::EnumName(get_text(reader, buffer2, event)?));
+                    }
+                    B_ENUM_VALUE => {
+                        return Ok(FibexEvent::EnumValue(get_text(reader, buffer2, event)?));
+                    }
+                    B_PROCESSING_INFO => {
+                        return Ok(FibexEvent::ProcessingInfoStart);
+                    }
+                    B_CODING_INFO => {
+                        return Ok(FibexEvent::CodingInfoStart(get_attribute(
+                            reader, event, B_ID,
+                        )?));
+                    }
+                    B_CODED_TYPE => {
+                        return Ok(FibexEvent::CodedType(
+                            get_attribute(reader, event, B_CODED_BASE_TYPE)?,
+                            get_attribute(reader, event, B_CODED_CATEGORY)?,
+                            get_attribute(reader, event, B_CODED_ENCODING)?,
+                            get_attribute(reader, event, B_CODED_BOM)?,
+                            get_attribute(reader, event, B_CODED_TERMINATION)?,
+                        ));
+                    }
+                    B_COMPU_METHODS => match skip(reader, buffer2, B_COMPU_METHODS)? {
+                        FibexEvent::Eou => {}
+                        FibexEvent::Eof => {
+                            return Ok(FibexEvent::Eof);
                         }
-                        B_SERVICE_IDENTIFIER => {
-                            return Ok(FibexEvent::ServiceIdentifier(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_SERVICE_VERSION_MAJOR => {
-                            return Ok(FibexEvent::MajorVersion(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_SERVICE_VERSION_MINOR => {
-                            return Ok(FibexEvent::MinorVersion(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_SERVICE_METHOD => {
-                            return Ok(FibexEvent::MethodStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_SERVICE_EVENT => {
-                            return Ok(FibexEvent::MethodStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_SERVICE_FIELD => {
-                            return Ok(FibexEvent::FieldStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_METHOD_IDENTIFIER => {
-                            return Ok(FibexEvent::MethodIdentifier(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_METHOD_INPUT => {
-                            return Ok(FibexEvent::MethodInputStart);
-                        }
-                        B_METHOD_INPUT_PARAMETER => {
-                            return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_METHOD_OUTPUT => {
-                            return Ok(FibexEvent::MethodOutputStart);
-                        }
-                        B_METHOD_OUTPUT_PARAMETER => {
-                            return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_FIELD_GETTER => {
-                            return Ok(FibexEvent::FieldGetterStart);
-                        }
-                        B_FIELD_SETTER => {
-                            return Ok(FibexEvent::FieldSetterStart);
-                        }
-                        B_FIELD_NOTIFIER => {
-                            return Ok(FibexEvent::FieldNotifierStart);
-                        }
-                        B_NOTIFICATION_IDENTIFIER => {
-                            return Ok(FibexEvent::NotificationIdentifier(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_ARRAY_DECLARATION => {
-                            return Ok(FibexEvent::ArrayDeclarationStart);
-                        }
-                        B_ARRAY_DIMENSION => {
-                            return Ok(FibexEvent::ArrayDimensionStart);
-                        }
-                        B_DIMENSION => {
-                            return Ok(FibexEvent::ArrayDimension(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MINIMUM_SIZE => {
-                            return Ok(FibexEvent::MinimumSize(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MAXIMUM_SIZE => {
-                            return Ok(FibexEvent::MaximumSize(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_UTILIZATION => {
-                            return Ok(FibexEvent::UtilizationStart);
-                        }
-                        B_HIGH_LOW_BYTE_ORDER => {
-                            return Ok(FibexEvent::HighLowByteOrder(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_LENGTH_FIELD => {
-                            return Ok(FibexEvent::LengthField(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_ARRAY_LENGTH_FIELD => {
-                            return Ok(FibexEvent::ArrayLengthField(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_TYPE_LENGTH_FIELD => {
-                            return Ok(FibexEvent::TypeLengthField(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MIN_LENGTH => {
-                            return Ok(FibexEvent::MinLength(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MAX_LENGTH => {
-                            return Ok(FibexEvent::MaxLength(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_BIT_LENGTH => {
-                            return Ok(FibexEvent::BitLength(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MIN_BIT_LENGTH => {
-                            return Ok(FibexEvent::MinBitLength(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MAX_BIT_LENGTH => {
-                            return Ok(FibexEvent::MaxBitLength(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_EVENT_GROUP => match self.skip_unrelated()? {
+                        _ => {}
+                    },
+                    B_MANUFACTURER_EXTENSION => {
+                        match skip(reader, buffer2, B_MANUFACTURER_EXTENSION)? {
                             FibexEvent::Eou => {}
                             FibexEvent::Eof => {
                                 return Ok(FibexEvent::Eof);
                             }
                             _ => {}
-                        },
-                        B_DATATYPE => {
-                            return Ok(FibexEvent::DatatypeStart(
-                                get_attribute(&self.reader, event, B_ID)?,
-                                get_attribute(&self.reader, event, B_DATATYPE_TYPE)?,
-                            ));
                         }
-                        B_DATATYPE_CLASS => {
-                            return Ok(FibexEvent::DatatypeClass(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_DATATYPE_MEMBER => {
-                            return Ok(FibexEvent::DatatypeMemberStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_POSITION => {
-                            return Ok(FibexEvent::Position(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_DATA_ID => {
-                            return Ok(FibexEvent::DataId(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_MANDATORY => {
-                            return Ok(FibexEvent::Mandatory(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_ENUM => {
-                            return Ok(FibexEvent::EnumStart);
-                        }
-                        B_ENUM_NAME => {
-                            return Ok(FibexEvent::EnumName(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_ENUM_VALUE => {
-                            return Ok(FibexEvent::EnumValue(get_text(
-                                &mut self.reader,
-                                &mut self.buffer2,
-                                event,
-                            )?));
-                        }
-                        B_PROCESSING_INFO => {
-                            return Ok(FibexEvent::ProcessingInfoStart);
-                        }
-                        B_CODING_INFO => {
-                            return Ok(FibexEvent::CodingInfoStart(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID,
-                            )?));
-                        }
-                        B_CODED_TYPE => {
-                            return Ok(FibexEvent::CodedType(
-                                get_attribute(&self.reader, event, B_CODED_BASE_TYPE)?,
-                                get_attribute(&self.reader, event, B_CODED_CATEGORY)?,
-                                get_attribute(&self.reader, event, B_CODED_ENCODING)?,
-                                get_attribute(&self.reader, event, B_CODED_BOM)?,
-                                get_attribute(&self.reader, event, B_CODED_TERMINATION)?,
-                            ));
-                        }
-                        B_COMPU_METHODS => match self.skip_unrelated()? {
-                            FibexEvent::Eou => {}
-                            FibexEvent::Eof => {
-                                return Ok(FibexEvent::Eof);
-                            }
-                            _ => {}
-                        },
-                        B_MANUFACTURER_EXTENSION => match self.skip_unrelated()? {
-                            FibexEvent::Eou => {}
-                            FibexEvent::Eof => {
-                                return Ok(FibexEvent::Eof);
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    },
-                    XmlEvent::Empty(ref event) => match event.local_name() {
-                        B_DATATYPE_REF => {
-                            return Ok(FibexEvent::DatatypeRef(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID_REF,
-                            )?));
-                        }
-                        B_CODING_REF => {
-                            return Ok(FibexEvent::CodingRef(get_attribute(
-                                &self.reader,
-                                event,
-                                B_ID_REF,
-                            )?));
-                        }
-                        _ => {}
-                    },
-                    XmlEvent::End(ref event) => match event.local_name() {
-                        B_SERVICE_INTERFACE => {
-                            return Ok(FibexEvent::ServiceEnd);
-                        }
-                        B_SERVICE_METHOD => {
-                            return Ok(FibexEvent::MethodEnd);
-                        }
-                        B_SERVICE_EVENT => {
-                            return Ok(FibexEvent::MethodEnd);
-                        }
-                        B_SERVICE_FIELD => {
-                            return Ok(FibexEvent::FieldEnd);
-                        }
-                        B_METHOD_INPUT => {
-                            return Ok(FibexEvent::MethodParamEnd);
-                        }
-                        B_METHOD_INPUT_PARAMETER => {
-                            return Ok(FibexEvent::DatatypeMemberEnd);
-                        }
-                        B_METHOD_OUTPUT => {
-                            return Ok(FibexEvent::MethodParamEnd);
-                        }
-                        B_METHOD_OUTPUT_PARAMETER => {
-                            return Ok(FibexEvent::DatatypeMemberEnd);
-                        }
-                        B_FIELD_GETTER => {
-                            return Ok(FibexEvent::FieldAccessorEnd);
-                        }
-                        B_FIELD_SETTER => {
-                            return Ok(FibexEvent::FieldAccessorEnd);
-                        }
-                        B_FIELD_NOTIFIER => {
-                            return Ok(FibexEvent::FieldAccessorEnd);
-                        }
-                        B_ARRAY_DECLARATION => {
-                            return Ok(FibexEvent::ArrayDeclarationEnd);
-                        }
-                        B_ARRAY_DIMENSION => {
-                            return Ok(FibexEvent::ArrayDimensionEnd);
-                        }
-                        B_UTILIZATION => {
-                            return Ok(FibexEvent::UtilizationEnd);
-                        }
-                        B_DATATYPE => {
-                            return Ok(FibexEvent::DatatypeEnd);
-                        }
-                        B_DATATYPE_MEMBER => {
-                            return Ok(FibexEvent::DatatypeMemberEnd);
-                        }
-                        B_ENUM => {
-                            return Ok(FibexEvent::EnumEnd);
-                        }
-                        B_PROCESSING_INFO => {
-                            return Ok(FibexEvent::ProcessingInfoEnd);
-                        }
-                        B_CODING_INFO => {
-                            return Ok(FibexEvent::CodingInfoEnd);
-                        }
-                        _ => {}
-                    },
-                    XmlEvent::Eof => return Ok(FibexEvent::Eof),
+                    }
                     _ => {}
-                }
+                },
+                XmlEvent::Empty(ref event) => match event.local_name() {
+                    B_DATATYPE_REF => {
+                        return Ok(FibexEvent::DatatypeRef(get_attribute(
+                            reader, event, B_ID_REF,
+                        )?));
+                    }
+                    B_CODING_REF => {
+                        return Ok(FibexEvent::CodingRef(get_attribute(
+                            reader, event, B_ID_REF,
+                        )?));
+                    }
+                    _ => {}
+                },
+                XmlEvent::End(ref event) => match event.local_name() {
+                    B_SERVICE_INTERFACE => {
+                        return Ok(FibexEvent::ServiceEnd);
+                    }
+                    B_SERVICE_METHOD => {
+                        return Ok(FibexEvent::MethodEnd);
+                    }
+                    B_SERVICE_EVENT => {
+                        return Ok(FibexEvent::MethodEnd);
+                    }
+                    B_SERVICE_FIELD => {
+                        return Ok(FibexEvent::FieldEnd);
+                    }
+                    B_METHOD_INPUT => {
+                        return Ok(FibexEvent::MethodParamEnd);
+                    }
+                    B_METHOD_INPUT_PARAMETER => {
+                        return Ok(FibexEvent::DatatypeMemberEnd);
+                    }
+                    B_METHOD_OUTPUT => {
+                        return Ok(FibexEvent::MethodParamEnd);
+                    }
+                    B_METHOD_OUTPUT_PARAMETER => {
+                        return Ok(FibexEvent::DatatypeMemberEnd);
+                    }
+                    B_FIELD_GETTER => {
+                        return Ok(FibexEvent::FieldAccessorEnd);
+                    }
+                    B_FIELD_SETTER => {
+                        return Ok(FibexEvent::FieldAccessorEnd);
+                    }
+                    B_FIELD_NOTIFIER => {
+                        return Ok(FibexEvent::FieldAccessorEnd);
+                    }
+                    B_ARRAY_DECLARATION => {
+                        return Ok(FibexEvent::ArrayDeclarationEnd);
+                    }
+                    B_ARRAY_DIMENSION => {
+                        return Ok(FibexEvent::ArrayDimensionEnd);
+                    }
+                    B_UTILIZATION => {
+                        return Ok(FibexEvent::UtilizationEnd);
+                    }
+                    B_DATATYPE => {
+                        return Ok(FibexEvent::DatatypeEnd);
+                    }
+                    B_DATATYPE_MEMBER => {
+                        return Ok(FibexEvent::DatatypeMemberEnd);
+                    }
+                    B_ENUM => {
+                        return Ok(FibexEvent::EnumEnd);
+                    }
+                    B_PROCESSING_INFO => {
+                        return Ok(FibexEvent::ProcessingInfoEnd);
+                    }
+                    B_CODING_INFO => {
+                        return Ok(FibexEvent::CodingInfoEnd);
+                    }
+                    _ => {}
+                },
+                XmlEvent::Eof => return Ok(FibexEvent::Eof),
+                _ => {}
             }
         }
+    }
 
-        fn skip_unrelated(&mut self) -> Result<FibexEvent, FibexError> {
-            loop {
-                match self.reader.read_event(&mut self.buffer2)? {
-                    XmlEvent::End(ref event) => match event.local_name() {
-                        B_EVENT_GROUP => return Ok(FibexEvent::Eou),
-                        B_COMPU_METHODS => return Ok(FibexEvent::Eou),
-                        B_MANUFACTURER_EXTENSION => return Ok(FibexEvent::Eou),
-                        _ => {}
-                    },
-                    XmlEvent::Eof => return Ok(FibexEvent::Eof),
-                    _ => {}
+    fn skip<B: BufRead>(
+        reader: &mut XmlReader<B>,
+        buffer: &mut Vec<u8>,
+        what: &[u8],
+    ) -> Result<FibexEvent, FibexError> {
+        loop {
+            match reader.read_event(buffer)? {
+                XmlEvent::End(ref event) => {
+                    if what == event.local_name() {
+                        return Ok(FibexEvent::Eou);
+                    } else {
+                        {}
+                    }
                 }
+                XmlEvent::Eof => return Ok(FibexEvent::Eof),
+                _ => {}
             }
         }
     }
@@ -2028,8 +2116,6 @@ mod xml {
         Ok(String::from(""))
     }
 }
-
-pub type FibexReader<B> = xml::FibexXmlReader<B>;
 
 #[cfg(test)]
 mod tests {
@@ -2065,6 +2151,11 @@ mod tests {
                     <service:MAJOR>1</service:MAJOR>
                     <service:MINOR>2</service:MINOR>
                 </service:API-VERSION>
+                <service:EVENT-GROUPS>
+                    <service:EVENT-GROUP ID="/SOMEIP/TEST/ServiceInterface_TestService/EventGroup_AllEvents">
+                        <ho:SHORT-NAME>AllEvents</ho:SHORT-NAME>
+                    </service:EVENT-GROUP>
+                </service:EVENT-GROUPS>
             </fx:SERVICE-INTERFACE>
         "#;
 

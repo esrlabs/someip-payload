@@ -1,4 +1,4 @@
-// someip types
+//! Contains the SOME/IP types.
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::any::Any;
@@ -6,56 +6,97 @@ use std::fmt::Display;
 use thiserror::Error;
 use ux::{i24, u24};
 
+/// Trait for type serialization.
 pub trait SOMType: Display {
+    /// Serializes the type into the provided serializer.
+    ///
+    /// Returns the number of bytes being consumed from the serializer or an error.
     fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError>;
+
+    /// Parses the type from the provided parser.
+    ///
+    /// Returns the number of bytes being consumed from the parser or an error.
     fn parse(&mut self, parser: &mut SOMParser) -> Result<usize, SOMTypeError>;
+
+    /// Returns the size in bytes of the type if being serialization.
     fn size(&self) -> usize;
 
+    /// Returns the category of the type.
     fn category(&self) -> SOMTypeCategory {
-        SOMTypeCategory::FixedLength
+        SOMTypeCategory::FixedLength // default
     }
 
+    /// Returns the type as an std::any::Any.
     fn as_any(&self) -> &dyn Any;
 }
 
+/// Trait for type metadata.
+pub trait SOMTypeWithMeta {
+    /// Adds metadata to an existing type.
+    fn with_meta(self, meta: SOMTypeMeta) -> Self;
+
+    /// Returns the metadata of the type.
+    fn meta(&self) -> Option<&SOMTypeMeta>;
+}
+
+#[doc(hidden)]
 const ERROR_TAG: &str = "SOME/IP Error";
 
+/// Different kinds of errors.
 #[derive(Error, Debug)]
 pub enum SOMTypeError {
+    /// Error for an unexpected end of buffer.
     #[error("{}: {0}", ERROR_TAG)]
     BufferExhausted(String),
+    /// Error for an invalid payload.
     #[error("{}: {0}", ERROR_TAG)]
     InvalidPayload(String),
+    /// Error for an invalid type.
     #[error("{}: {0}", ERROR_TAG)]
     InvalidType(String),
+    /// Error for an invalid UTF-8 format.
     #[error("{}: {0:?}", ERROR_TAG)]
     Utf8Error(#[from] std::string::FromUtf8Error),
+    /// Error for an invalid UTF-16 format.
     #[error("{}: {0:?}", ERROR_TAG)]
     Utf16Error(#[from] std::string::FromUtf16Error),
 }
 
+/// Different kinds of type categories.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SOMTypeCategory {
+    /// Category of types with a fixed length.
     FixedLength,
+    /// Category of types with an implicit length provided by a model.
     ImplicitLength,
+    /// Category of types with an explicit length provided by a length-field.
     ExplicitLength,
 }
 
+/// Different kinds of endianness.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SOMEndian {
+    /// Represents big endianness.
     Big,
+    /// Represents little endianness.
     Little,
 }
 
+/// Different kinds of lengthfields.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SOMLengthField {
+    /// Represents no lengthfield.
     None,
+    /// Represents a u8 lengthfield.
     U8,
+    /// Represents a u16 lengthfield.
     U16,
+    /// Represents a u32 lengthfield.
     U32,
 }
 
 impl SOMLengthField {
+    #[doc(hidden)]
     fn size(&self) -> usize {
         match self {
             SOMLengthField::None => 0usize,
@@ -66,14 +107,19 @@ impl SOMLengthField {
     }
 }
 
+/// Different kinds of typefields.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SOMTypeField {
+    /// Represents a u8 typefield.
     U8,
+    /// Represents a u16 typefield.
     U16,
+    /// Represents a u32 typefield.
     U32,
 }
 
 impl SOMTypeField {
+    #[doc(hidden)]
     fn size(&self) -> usize {
         match self {
             SOMTypeField::U8 => std::mem::size_of::<u8>(),
@@ -83,13 +129,17 @@ impl SOMTypeField {
     }
 }
 
+/// Represents the metadata associated with a type.
 #[derive(Debug, Clone)]
 pub struct SOMTypeMeta {
+    /// Represents a name associated with a type.
     pub name: String,
+    /// Represents a description associated with a type.
     pub description: String,
 }
 
 impl SOMTypeMeta {
+    /// Creates a new empty metadata.
     pub fn empty() -> Self {
         SOMTypeMeta {
             name: String::from(""),
@@ -97,10 +147,12 @@ impl SOMTypeMeta {
         }
     }
 
+    /// Creates a new metadata from the given name and description.
     pub fn from(name: String, description: String) -> Self {
         SOMTypeMeta { name, description }
     }
 
+    /// Returns a string respresentation of the metadata.
     pub fn to_str(&self) -> String {
         if self.name.is_empty() || self.description.is_empty() {
             self.name.clone()
@@ -110,530 +162,541 @@ impl SOMTypeMeta {
     }
 }
 
-mod serialization {
-    use super::*;
-
-    pub struct SOMSerializer<'a> {
-        buffer: &'a mut [u8],
-        offset: usize,
-    }
-
-    pub struct SOMSerializerPromise {
-        offset: usize,
-        size: usize,
-    }
-
-    impl<'a> SOMSerializer<'a> {
-        pub fn new(buffer: &'a mut [u8]) -> Self {
-            SOMSerializer { buffer, offset: 0 }
-        }
-
-        pub fn offset(&self) -> usize {
-            self.offset
-        }
-
-        pub fn promise(&mut self, size: usize) -> Result<SOMSerializerPromise, SOMTypeError> {
-            self.check_size(size)?;
-            let result = SOMSerializerPromise {
-                offset: self.offset,
-                size,
-            };
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn write_lengthfield(
-            &mut self,
-            promise: SOMSerializerPromise,
-            lengthfield: SOMLengthField,
-            value: usize,
-        ) -> Result<(), SOMTypeError> {
-            if promise.size != lengthfield.size() {
-                return Err(SOMTypeError::InvalidType(format!(
-                    "Invalid Length-Field size {} at offset {}",
-                    lengthfield.size(),
-                    promise.offset
-                )));
-            }
-
-            match lengthfield {
-                SOMLengthField::None => {}
-                SOMLengthField::U8 => self.buffer[promise.offset] = value as u8,
-                SOMLengthField::U16 => {
-                    BigEndian::write_u16(&mut self.buffer[promise.offset..], value as u16)
-                }
-                SOMLengthField::U32 => {
-                    BigEndian::write_u32(&mut self.buffer[promise.offset..], value as u32)
-                }
-            };
-
-            Ok(())
-        }
-
-        pub fn write_typefield(
-            &mut self,
-            typefield: SOMTypeField,
-            value: usize,
-        ) -> Result<(), SOMTypeError> {
-            match typefield {
-                SOMTypeField::U8 => self.write_u8(value as u8)?,
-                SOMTypeField::U16 => self.write_u16(value as u16, SOMEndian::Big)?,
-                SOMTypeField::U32 => self.write_u32(value as u32, SOMEndian::Big)?,
-            };
-
-            Ok(())
-        }
-
-        pub fn write_bool(&mut self, value: bool) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<bool>();
-            self.check_size(size)?;
-
-            self.buffer[self.offset] = match value {
-                true => 1,
-                false => 0,
-            };
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_u8(&mut self, value: u8) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<u8>();
-            self.check_size(size)?;
-
-            self.buffer[self.offset] = value;
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_i8(&mut self, value: i8) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<i8>();
-            self.check_size(size)?;
-
-            self.buffer[self.offset] = value as u8;
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_u16(&mut self, value: u16, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<u16>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_u16(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_u16(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_i16(&mut self, value: i16, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<i16>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_i16(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_i16(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_u24(&mut self, value: u24, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<u16>() + std::mem::size_of::<u8>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => {
-                    BigEndian::write_uint(&mut self.buffer[self.offset..], u64::from(value), size)
-                }
-                SOMEndian::Little => LittleEndian::write_uint(
-                    &mut self.buffer[self.offset..],
-                    u64::from(value),
-                    size,
-                ),
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_i24(&mut self, value: i24, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<i16>() + std::mem::size_of::<i8>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => {
-                    BigEndian::write_int(&mut self.buffer[self.offset..], i64::from(value), size)
-                }
-                SOMEndian::Little => {
-                    LittleEndian::write_int(&mut self.buffer[self.offset..], i64::from(value), size)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_u32(&mut self, value: u32, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<u32>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_u32(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_u32(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_i32(&mut self, value: i32, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<i32>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_i32(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_i32(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_u64(&mut self, value: u64, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<u64>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_u64(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_u64(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_i64(&mut self, value: i64, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<i64>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_i64(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_i64(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_f32(&mut self, value: f32, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<f32>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_f32(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_f32(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        pub fn write_f64(&mut self, value: f64, endian: SOMEndian) -> Result<(), SOMTypeError> {
-            let size = std::mem::size_of::<f64>();
-            self.check_size(size)?;
-
-            match endian {
-                SOMEndian::Big => BigEndian::write_f64(&mut self.buffer[self.offset..], value),
-                SOMEndian::Little => {
-                    LittleEndian::write_f64(&mut self.buffer[self.offset..], value)
-                }
-            }
-
-            self.offset += size;
-            Ok(())
-        }
-
-        fn check_size(&self, size: usize) -> Result<(), SOMTypeError> {
-            if self.buffer.len() < (self.offset + size) {
-                return Err(SOMTypeError::BufferExhausted(format!(
-                    "Serializer exausted at offset {} for Object size {}",
-                    self.offset, size
-                )));
-            }
-
-            Ok(())
-        }
-    }
-
-    pub struct SOMParser<'a> {
-        buffer: &'a [u8],
-        offset: usize,
-    }
-
-    impl<'a> SOMParser<'a> {
-        pub fn new(buffer: &'a [u8]) -> Self {
-            SOMParser { buffer, offset: 0 }
-        }
-
-        pub fn offset(&self) -> usize {
-            self.offset
-        }
-
-        pub fn skip(&mut self, size: usize) -> Result<usize, SOMTypeError> {
-            self.check_size(size)?;
-            self.offset += size;
-            Ok(size)
-        }
-
-        pub fn read_lengthfield(
-            &mut self,
-            lengthfield: SOMLengthField,
-        ) -> Result<usize, SOMTypeError> {
-            let size = lengthfield.size();
-            self.check_size(size)?;
-
-            let result = match lengthfield {
-                SOMLengthField::None => 0usize,
-                SOMLengthField::U8 => self.read_u8()? as usize,
-                SOMLengthField::U16 => self.read_u16(SOMEndian::Big)? as usize,
-                SOMLengthField::U32 => self.read_u32(SOMEndian::Big)? as usize,
-            };
-
-            Ok(result)
-        }
-
-        pub fn read_typefield(
-            &mut self,
-            typefield: &mut SOMTypeField,
-        ) -> Result<usize, SOMTypeError> {
-            let size = typefield.size();
-            self.check_size(size)?;
-
-            let result = match typefield {
-                SOMTypeField::U8 => self.read_u8()? as usize,
-                SOMTypeField::U16 => self.read_u16(SOMEndian::Big)? as usize,
-                SOMTypeField::U32 => self.read_u32(SOMEndian::Big)? as usize,
-            };
-
-            Ok(result)
-        }
-
-        pub fn read_bool(&mut self) -> Result<bool, SOMTypeError> {
-            let size = std::mem::size_of::<bool>();
-            self.check_size(size)?;
-
-            let value = self.buffer[self.offset];
-            let result = match value {
-                1 => true,
-                0 => false,
-                _ => {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Bool value {} at offset {}",
-                        value, self.offset
-                    )))
-                }
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_u8(&mut self) -> Result<u8, SOMTypeError> {
-            let size = std::mem::size_of::<u8>();
-            self.check_size(size)?;
-
-            let result = self.buffer[self.offset];
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_i8(&mut self) -> Result<i8, SOMTypeError> {
-            let size = std::mem::size_of::<i8>();
-            self.check_size(size)?;
-
-            let result = self.buffer[self.offset] as i8;
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_u16(&mut self, endian: SOMEndian) -> Result<u16, SOMTypeError> {
-            let size = std::mem::size_of::<u16>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_u16(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_u16(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_i16(&mut self, endian: SOMEndian) -> Result<i16, SOMTypeError> {
-            let size = std::mem::size_of::<i16>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_i16(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_i16(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_u24(&mut self, endian: SOMEndian) -> Result<u24, SOMTypeError> {
-            let size = std::mem::size_of::<u16>() + std::mem::size_of::<u8>();
-            self.check_size(size)?;
-
-            let result = u24::new(match endian {
-                SOMEndian::Big => BigEndian::read_uint(&self.buffer[self.offset..], size),
-                SOMEndian::Little => LittleEndian::read_uint(&self.buffer[self.offset..], size),
-            } as u32);
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_i24(&mut self, endian: SOMEndian) -> Result<i24, SOMTypeError> {
-            let size = std::mem::size_of::<i16>() + std::mem::size_of::<i8>();
-            self.check_size(size)?;
-
-            let result = i24::new(match endian {
-                SOMEndian::Big => BigEndian::read_int(&self.buffer[self.offset..], size),
-                SOMEndian::Little => LittleEndian::read_int(&self.buffer[self.offset..], size),
-            } as i32);
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_u32(&mut self, endian: SOMEndian) -> Result<u32, SOMTypeError> {
-            let size = std::mem::size_of::<u32>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_u32(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_u32(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_i32(&mut self, endian: SOMEndian) -> Result<i32, SOMTypeError> {
-            let size = std::mem::size_of::<i32>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_i32(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_i32(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_u64(&mut self, endian: SOMEndian) -> Result<u64, SOMTypeError> {
-            let size = std::mem::size_of::<u64>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_u64(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_u64(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_i64(&mut self, endian: SOMEndian) -> Result<i64, SOMTypeError> {
-            let size = std::mem::size_of::<i64>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_i64(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_i64(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_f32(&mut self, endian: SOMEndian) -> Result<f32, SOMTypeError> {
-            let size = std::mem::size_of::<f32>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_f32(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_f32(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        pub fn read_f64(&mut self, endian: SOMEndian) -> Result<f64, SOMTypeError> {
-            let size = std::mem::size_of::<f64>();
-            self.check_size(size)?;
-
-            let result = match endian {
-                SOMEndian::Big => BigEndian::read_f64(&self.buffer[self.offset..]),
-                SOMEndian::Little => LittleEndian::read_f64(&self.buffer[self.offset..]),
-            };
-
-            self.offset += size;
-            Ok(result)
-        }
-
-        fn check_size(&self, size: usize) -> Result<(), SOMTypeError> {
-            if self.buffer.len() < (self.offset + size) {
-                return Err(SOMTypeError::BufferExhausted(format!(
-                    "Parser exausted at offset {} for Object size {}",
-                    self.offset, size
-                )));
-            }
-
-            Ok(())
-        }
+/// Serializer for SOME/IP types.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMBool::from(true);
+/// let mut buffer = vec![0u8; obj.size()];
+///
+/// let mut serializer = SOMSerializer::new(&mut buffer[..]);
+/// obj.serialize(&mut serializer)?;
+/// # Ok::<(), SOMTypeError>(())
+/// ```
+pub struct SOMSerializer<'a> {
+    #[doc(hidden)]
+    buffer: &'a mut [u8],
+    #[doc(hidden)]
+    offset: usize,
+}
+
+#[doc(hidden)]
+struct SOMSerializerPromise {
+    offset: usize,
+    size: usize,
+}
+
+impl<'a> SOMSerializer<'a> {
+    /// Creates a new serializer for the given buffer.
+    pub fn new(buffer: &'a mut [u8]) -> Self {
+        SOMSerializer { buffer, offset: 0 }
     }
 }
 
-pub type SOMSerializer<'a> = serialization::SOMSerializer<'a>;
-pub type SOMParser<'a> = serialization::SOMParser<'a>;
+#[doc(hidden)]
+impl<'a> SOMSerializer<'a> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
 
+    fn promise(&mut self, size: usize) -> Result<SOMSerializerPromise, SOMTypeError> {
+        self.check_size(size)?;
+        let result = SOMSerializerPromise {
+            offset: self.offset,
+            size,
+        };
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn write_lengthfield(
+        &mut self,
+        promise: SOMSerializerPromise,
+        lengthfield: SOMLengthField,
+        value: usize,
+    ) -> Result<(), SOMTypeError> {
+        if promise.size != lengthfield.size() {
+            return Err(SOMTypeError::InvalidType(format!(
+                "Invalid Length-Field size {} at offset {}",
+                lengthfield.size(),
+                promise.offset
+            )));
+        }
+
+        match lengthfield {
+            SOMLengthField::None => {}
+            SOMLengthField::U8 => self.buffer[promise.offset] = value as u8,
+            SOMLengthField::U16 => {
+                BigEndian::write_u16(&mut self.buffer[promise.offset..], value as u16)
+            }
+            SOMLengthField::U32 => {
+                BigEndian::write_u32(&mut self.buffer[promise.offset..], value as u32)
+            }
+        };
+
+        Ok(())
+    }
+
+    fn write_typefield(
+        &mut self,
+        typefield: SOMTypeField,
+        value: usize,
+    ) -> Result<(), SOMTypeError> {
+        match typefield {
+            SOMTypeField::U8 => self.write_u8(value as u8)?,
+            SOMTypeField::U16 => self.write_u16(value as u16, SOMEndian::Big)?,
+            SOMTypeField::U32 => self.write_u32(value as u32, SOMEndian::Big)?,
+        };
+
+        Ok(())
+    }
+
+    fn write_bool(&mut self, value: bool) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<bool>();
+        self.check_size(size)?;
+
+        self.buffer[self.offset] = match value {
+            true => 1,
+            false => 0,
+        };
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_u8(&mut self, value: u8) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<u8>();
+        self.check_size(size)?;
+
+        self.buffer[self.offset] = value;
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_i8(&mut self, value: i8) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<i8>();
+        self.check_size(size)?;
+
+        self.buffer[self.offset] = value as u8;
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_u16(&mut self, value: u16, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<u16>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_u16(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_u16(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_i16(&mut self, value: i16, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<i16>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_i16(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_i16(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_u24(&mut self, value: u24, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<u16>() + std::mem::size_of::<u8>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => {
+                BigEndian::write_uint(&mut self.buffer[self.offset..], u64::from(value), size)
+            }
+            SOMEndian::Little => {
+                LittleEndian::write_uint(&mut self.buffer[self.offset..], u64::from(value), size)
+            }
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_i24(&mut self, value: i24, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<i16>() + std::mem::size_of::<i8>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => {
+                BigEndian::write_int(&mut self.buffer[self.offset..], i64::from(value), size)
+            }
+            SOMEndian::Little => {
+                LittleEndian::write_int(&mut self.buffer[self.offset..], i64::from(value), size)
+            }
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_u32(&mut self, value: u32, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<u32>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_u32(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_u32(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_i32(&mut self, value: i32, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<i32>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_i32(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_i32(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_u64(&mut self, value: u64, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<u64>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_u64(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_u64(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_i64(&mut self, value: i64, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<i64>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_i64(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_i64(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_f32(&mut self, value: f32, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<f32>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_f32(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_f32(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn write_f64(&mut self, value: f64, endian: SOMEndian) -> Result<(), SOMTypeError> {
+        let size = std::mem::size_of::<f64>();
+        self.check_size(size)?;
+
+        match endian {
+            SOMEndian::Big => BigEndian::write_f64(&mut self.buffer[self.offset..], value),
+            SOMEndian::Little => LittleEndian::write_f64(&mut self.buffer[self.offset..], value),
+        }
+
+        self.offset += size;
+        Ok(())
+    }
+
+    fn check_size(&self, size: usize) -> Result<(), SOMTypeError> {
+        if self.buffer.len() < (self.offset + size) {
+            return Err(SOMTypeError::BufferExhausted(format!(
+                "Serializer exhausted at offset {} for Object size {}",
+                self.offset, size
+            )));
+        }
+
+        Ok(())
+    }
+}
+
+/// Parser for SOME/IP types.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let buffer: [u8;1] = [0x01];
+/// let mut parser = SOMParser::new(&buffer);
+///
+/// let mut obj = SOMu8::empty();
+/// obj.parse(&mut parser)?;
+/// # Ok::<(), SOMTypeError>(())
+/// ```
+pub struct SOMParser<'a> {
+    #[doc(hidden)]
+    buffer: &'a [u8],
+    #[doc(hidden)]
+    offset: usize,
+}
+
+impl<'a> SOMParser<'a> {
+    /// Creates a new parser for the given buffer.
+    pub fn new(buffer: &'a [u8]) -> Self {
+        SOMParser { buffer, offset: 0 }
+    }
+}
+
+#[doc(hidden)]
+impl<'a> SOMParser<'a> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn skip(&mut self, size: usize) -> Result<(), SOMTypeError> {
+        self.check_size(size)?;
+        self.offset += size;
+        Ok(())
+    }
+
+    fn read_lengthfield(&mut self, lengthfield: SOMLengthField) -> Result<usize, SOMTypeError> {
+        let size = lengthfield.size();
+        self.check_size(size)?;
+
+        let result = match lengthfield {
+            SOMLengthField::None => 0usize,
+            SOMLengthField::U8 => self.read_u8()? as usize,
+            SOMLengthField::U16 => self.read_u16(SOMEndian::Big)? as usize,
+            SOMLengthField::U32 => self.read_u32(SOMEndian::Big)? as usize,
+        };
+
+        Ok(result)
+    }
+
+    fn read_typefield(&mut self, typefield: &mut SOMTypeField) -> Result<usize, SOMTypeError> {
+        let size = typefield.size();
+        self.check_size(size)?;
+
+        let result = match typefield {
+            SOMTypeField::U8 => self.read_u8()? as usize,
+            SOMTypeField::U16 => self.read_u16(SOMEndian::Big)? as usize,
+            SOMTypeField::U32 => self.read_u32(SOMEndian::Big)? as usize,
+        };
+
+        Ok(result)
+    }
+
+    fn read_bool(&mut self) -> Result<bool, SOMTypeError> {
+        let size = std::mem::size_of::<bool>();
+        self.check_size(size)?;
+
+        let value = self.buffer[self.offset];
+        let result = match value {
+            1 => true,
+            0 => false,
+            _ => {
+                return Err(SOMTypeError::InvalidPayload(format!(
+                    "Invalid Bool value {} at offset {}",
+                    value, self.offset
+                )))
+            }
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_u8(&mut self) -> Result<u8, SOMTypeError> {
+        let size = std::mem::size_of::<u8>();
+        self.check_size(size)?;
+
+        let result = self.buffer[self.offset];
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_i8(&mut self) -> Result<i8, SOMTypeError> {
+        let size = std::mem::size_of::<i8>();
+        self.check_size(size)?;
+
+        let result = self.buffer[self.offset] as i8;
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_u16(&mut self, endian: SOMEndian) -> Result<u16, SOMTypeError> {
+        let size = std::mem::size_of::<u16>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_u16(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_u16(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_i16(&mut self, endian: SOMEndian) -> Result<i16, SOMTypeError> {
+        let size = std::mem::size_of::<i16>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_i16(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_i16(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_u24(&mut self, endian: SOMEndian) -> Result<u24, SOMTypeError> {
+        let size = std::mem::size_of::<u16>() + std::mem::size_of::<u8>();
+        self.check_size(size)?;
+
+        let result = u24::new(match endian {
+            SOMEndian::Big => BigEndian::read_uint(&self.buffer[self.offset..], size),
+            SOMEndian::Little => LittleEndian::read_uint(&self.buffer[self.offset..], size),
+        } as u32);
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_i24(&mut self, endian: SOMEndian) -> Result<i24, SOMTypeError> {
+        let size = std::mem::size_of::<i16>() + std::mem::size_of::<i8>();
+        self.check_size(size)?;
+
+        let result = i24::new(match endian {
+            SOMEndian::Big => BigEndian::read_int(&self.buffer[self.offset..], size),
+            SOMEndian::Little => LittleEndian::read_int(&self.buffer[self.offset..], size),
+        } as i32);
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_u32(&mut self, endian: SOMEndian) -> Result<u32, SOMTypeError> {
+        let size = std::mem::size_of::<u32>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_u32(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_u32(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_i32(&mut self, endian: SOMEndian) -> Result<i32, SOMTypeError> {
+        let size = std::mem::size_of::<i32>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_i32(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_i32(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_u64(&mut self, endian: SOMEndian) -> Result<u64, SOMTypeError> {
+        let size = std::mem::size_of::<u64>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_u64(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_u64(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_i64(&mut self, endian: SOMEndian) -> Result<i64, SOMTypeError> {
+        let size = std::mem::size_of::<i64>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_i64(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_i64(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_f32(&mut self, endian: SOMEndian) -> Result<f32, SOMTypeError> {
+        let size = std::mem::size_of::<f32>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_f32(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_f32(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn read_f64(&mut self, endian: SOMEndian) -> Result<f64, SOMTypeError> {
+        let size = std::mem::size_of::<f64>();
+        self.check_size(size)?;
+
+        let result = match endian {
+            SOMEndian::Big => BigEndian::read_f64(&self.buffer[self.offset..]),
+            SOMEndian::Little => LittleEndian::read_f64(&self.buffer[self.offset..]),
+        };
+
+        self.offset += size;
+        Ok(result)
+    }
+
+    fn check_size(&self, size: usize) -> Result<(), SOMTypeError> {
+        if self.buffer.len() < (self.offset + size) {
+            return Err(SOMTypeError::BufferExhausted(format!(
+                "Parser exhausted at offset {} for Object size {}",
+                self.offset, size
+            )));
+        }
+
+        Ok(())
+    }
+}
+
+/// Contains the primitive types.
 pub(crate) mod primitives {
     use super::*;
 
+    /// A primitive type.
     #[derive(Debug, Clone)]
     pub struct SOMPrimitiveType<T> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// Optional value of the type.
         value: Option<T>,
     }
 
     impl<T: Copy + PartialEq> SOMPrimitiveType<T> {
+        /// Creates a new empty type.
         pub fn empty() -> Self {
             SOMPrimitiveType {
                 meta: None,
@@ -641,6 +704,7 @@ pub(crate) mod primitives {
             }
         }
 
+        /// Creates a new type from the given value.
         pub fn from(value: T) -> Self {
             SOMPrimitiveType {
                 meta: None,
@@ -648,31 +712,39 @@ pub(crate) mod primitives {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Sets the value of the type.
         pub fn set(&mut self, value: T) {
             self.value = Some(value);
         }
 
+        /// Returns the value of the type.
         pub fn get(&self) -> Option<T> {
             self.value
         }
     }
 
+    impl<T: Copy + PartialEq> SOMTypeWithMeta for SOMPrimitiveType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
+
+    /// A primitive type with endianness.
     #[derive(Debug, Clone)]
     pub struct SOMPrimitiveTypeWithEndian<T> {
+        /// The contained primitive type.
         primitive: SOMPrimitiveType<T>,
+        /// The endianness of the type.
         endian: SOMEndian,
     }
 
     impl<T: Copy + PartialEq> SOMPrimitiveTypeWithEndian<T> {
+        /// Creates a new empty type.
         pub fn empty(endian: SOMEndian) -> Self {
             SOMPrimitiveTypeWithEndian {
                 primitive: SOMPrimitiveType::empty(),
@@ -680,6 +752,7 @@ pub(crate) mod primitives {
             }
         }
 
+        /// Creates a new type from the given value.
         pub fn from(endian: SOMEndian, value: T) -> Self {
             SOMPrimitiveTypeWithEndian {
                 endian,
@@ -687,25 +760,30 @@ pub(crate) mod primitives {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.primitive = self.primitive.with_meta(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.primitive.meta()
-        }
-
+        /// Sets the value of the type.
         pub fn set(&mut self, value: T) {
             self.primitive.set(value);
         }
 
+        /// Returns the value of the type.
         pub fn get(&self) -> Option<T> {
             self.primitive.get()
         }
 
+        /// Returns the contained primitive type.
         pub(crate) fn primitive(&self) -> &SOMPrimitiveType<T> {
             &self.primitive
+        }
+    }
+
+    impl<T: Copy + PartialEq> SOMTypeWithMeta for SOMPrimitiveTypeWithEndian<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.primitive = self.primitive.with_meta(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.primitive.meta()
         }
     }
 
@@ -1152,34 +1230,151 @@ pub(crate) mod primitives {
     }
 }
 
+/// Type for a bool.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMBool::from(true);
+/// ```
 pub type SOMBool = primitives::SOMPrimitiveType<bool>;
+
+/// Type for a u8.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMu8::from(195u8);
+/// ```
 pub type SOMu8 = primitives::SOMPrimitiveType<u8>;
+
+/// Type for a i8.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMi8::from(-95i8);
+/// ```
 pub type SOMi8 = primitives::SOMPrimitiveType<i8>;
+
+/// Type for a u16.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMu16::from(SOMEndian::Big, 49200u16);
+/// ```
 pub type SOMu16 = primitives::SOMPrimitiveTypeWithEndian<u16>;
+
+/// Type for a i16.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMi16::from(SOMEndian::Big, -9200i16);
+/// ```
 pub type SOMi16 = primitives::SOMPrimitiveTypeWithEndian<i16>;
+
+/// Type for a u24.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// use ux::u24;
+///
+/// let obj = SOMu24::from(SOMEndian::Big, u24::new(12513060u32));
+/// ```
 pub type SOMu24 = primitives::SOMPrimitiveTypeWithEndian<u24>;
+/// Type for a i24.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// use ux::i24;
+///
+/// let obj = SOMi24::from(SOMEndian::Big, i24::new(-2513060i32));
+/// ```
 pub type SOMi24 = primitives::SOMPrimitiveTypeWithEndian<i24>;
+
+/// Type for a u32.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMu32::from(SOMEndian::Big, 3405691582u32);
+/// ```
 pub type SOMu32 = primitives::SOMPrimitiveTypeWithEndian<u32>;
+
+/// Type for a i32.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMi32::from(SOMEndian::Big, -405691582i32);
+/// ```
 pub type SOMi32 = primitives::SOMPrimitiveTypeWithEndian<i32>;
+
+/// Type for a u64.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMu64::from(SOMEndian::Big, 16045704242864831166u64);
+/// ```
 pub type SOMu64 = primitives::SOMPrimitiveTypeWithEndian<u64>;
+
+/// Type for a i64.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMi64::from(SOMEndian::Big, -6045704242864831166i64);
+/// ```
 pub type SOMi64 = primitives::SOMPrimitiveTypeWithEndian<i64>;
+
+/// Type for a f32.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMf32::from(SOMEndian::Big, 1.0f32);
+/// ```
 pub type SOMf32 = primitives::SOMPrimitiveTypeWithEndian<f32>;
+
+/// Type for a f64.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMf64::from(SOMEndian::Big, 1.0f64);
+/// ```
 pub type SOMf64 = primitives::SOMPrimitiveTypeWithEndian<f64>;
 
+/// Contains the array types.
 pub(crate) mod arrays {
     use super::*;
 
+    /// An array type.
+    ///
+    /// An array is either of fixed or dynamic length.
     #[derive(Debug, Clone)]
     pub struct SOMArrayType<T: SOMType + Any + Clone> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The lengthfield of the type.
         lengthfield: SOMLengthField,
+        /// The elements of the type.
         elements: Vec<T>,
+        /// Current number of elements.
         length: usize,
+        /// Minimum number of elements necessary.
         min: usize,
+        /// Maximum number of elements allowed.
         max: usize,
     }
 
     impl<T: SOMType + Any + Clone> SOMArrayType<T> {
+        /// Creates a new array from the given elements.
         pub fn from(lengthfield: SOMLengthField, min: usize, max: usize, elements: Vec<T>) -> Self {
             let size: usize = elements.len();
             SOMArrayType {
@@ -1192,6 +1387,7 @@ pub(crate) mod arrays {
             }
         }
 
+        /// Creates a new empty array of fixed length.
         pub fn fixed(element: T, size: usize) -> Self {
             SOMArrayType {
                 meta: None,
@@ -1203,6 +1399,7 @@ pub(crate) mod arrays {
             }
         }
 
+        /// Creates a new empty array of dynamic length.
         pub fn dynamic(lengthfield: SOMLengthField, element: T, min: usize, max: usize) -> Self {
             SOMArrayType {
                 meta: None,
@@ -1214,31 +1411,29 @@ pub(crate) mod arrays {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Returns whether this array is dynamic.
         pub fn is_dynamic(&self) -> bool {
             self.min != self.max
         }
 
+        /// Returns the maximum number of elements allowed.
         pub fn max(&self) -> usize {
             self.max
         }
 
+        /// Returns the minimum number of elements necessary.
         pub fn min(&self) -> usize {
             self.min
         }
 
+        /// Returns the current number of elements.
         pub fn len(&self) -> usize {
             self.length
         }
 
+        /// Returns the element at given index, if any.
+        ///
+        /// Note: The index of the element shall be zero-based.
         pub fn get(&self, index: usize) -> Option<&T> {
             if index < self.length {
                 return self.elements.get(index);
@@ -1247,27 +1442,36 @@ pub(crate) mod arrays {
             None
         }
 
+        /// Returns the mutable element at given index and
+        /// adjusts the current number of elements if necessary.
+        ///
+        /// Note: The index of the element shall be zero-based.
         pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-            if self.apply(index) {
+            if self.apply_len(index) {
                 return self.elements.get_mut(index);
             }
 
             None
         }
 
-        fn apply(&mut self, index: usize) -> bool {
+        /// Clears the current number of elements.
+        pub fn clear(&mut self) {
+            self.length = 0;
+        }
+
+        #[doc(hidden)]
+        fn apply_len(&mut self, index: usize) -> bool {
             if index < self.max {
-                self.length = index + 1usize;
+                if index + 1usize > self.len() {
+                    self.length = index + 1usize;
+                }
                 return true;
             }
 
             false
         }
 
-        pub fn clear(&mut self) {
-            self.length = 0;
-        }
-
+        #[doc(hidden)]
         fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
@@ -1366,35 +1570,210 @@ pub(crate) mod arrays {
             self
         }
     }
+
+    impl<T: SOMType + Any + Clone> SOMTypeWithMeta for SOMArrayType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
 }
 
+/// Type for a complex array member.
+///
+/// See also [SOMArray]
 pub type SOMArrayMember = wrapper::SOMTypeWrapper;
+
+/// Type for a complex array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMArray::fixed(
+///     SOMArrayMember::Struct(SOMStruct::from(vec![
+///         SOMStructMember::Bool(SOMBool::empty()),
+///         SOMStructMember::U16(SOMu16::empty(SOMEndian::Big)),
+///     ])),
+///     3, // max
+/// );
+///
+/// let obj2 = SOMArray::dynamic(
+///     SOMLengthField::U32,
+///     SOMArrayMember::Struct(SOMStruct::from(vec![
+///         SOMStructMember::Bool(SOMBool::empty()),
+///         SOMStructMember::U16(SOMu16::empty(SOMEndian::Big)),
+///     ])),
+///     0, // min
+///     3, // max
+/// );
+/// ```
 pub type SOMArray = arrays::SOMArrayType<SOMArrayMember>;
 
+/// Type for a bool array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMBoolArray::fixed(SOMBool::empty(), 3);
+///
+/// let obj2 = SOMBoolArray::dynamic(SOMLengthField::U32, SOMBool::empty(), 0, 3);
+/// ```
 pub type SOMBoolArray = arrays::SOMArrayType<SOMBool>;
+
+/// Type for a u8 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMu8Array::fixed(SOMu8::empty(), 3);
+///
+/// let obj2 = SOMu8Array::dynamic(SOMLengthField::U32, SOMu8::empty(), 0, 3);
+/// ```
 pub type SOMu8Array = arrays::SOMArrayType<SOMu8>;
+
+/// Type for a i8 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMi8Array::fixed(SOMi8::empty(), 3);
+///
+/// let obj2 = SOMi8Array::dynamic(SOMLengthField::U32, SOMi8::empty(), 0, 3);
+/// ```
 pub type SOMi8Array = arrays::SOMArrayType<SOMi8>;
+
+/// Type for a u16 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMu16Array::fixed(SOMu16::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMu16Array::dynamic(SOMLengthField::U32, SOMu16::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMu16Array = arrays::SOMArrayType<SOMu16>;
+
+/// Type for a i16 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMi16Array::fixed(SOMi16::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMi16Array::dynamic(SOMLengthField::U32, SOMi16::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMi16Array = arrays::SOMArrayType<SOMi16>;
+
+/// Type for a u24 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// use ux::u24;
+///
+/// let obj1 = SOMu24Array::fixed(SOMu24::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMu24Array::dynamic(SOMLengthField::U32, SOMu24::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMu24Array = arrays::SOMArrayType<SOMu24>;
+
+/// Type for a i24 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// use ux::i24;
+///
+/// let obj1 = SOMi24Array::fixed(SOMi24::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMi24Array::dynamic(SOMLengthField::U32, SOMi24::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMi24Array = arrays::SOMArrayType<SOMi24>;
+
+/// Type for a u32 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMu32Array::fixed(SOMu32::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMu32Array::dynamic(SOMLengthField::U32, SOMu32::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMu32Array = arrays::SOMArrayType<SOMu32>;
+
+/// Type for a i32 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMi32Array::fixed(SOMi32::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMi32Array::dynamic(SOMLengthField::U32, SOMi32::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMi32Array = arrays::SOMArrayType<SOMi32>;
+
+/// Type for a u64 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMu64Array::fixed(SOMu64::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMu64Array::dynamic(SOMLengthField::U32, SOMu64::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMu64Array = arrays::SOMArrayType<SOMu64>;
+
+/// Type for a i64 array.
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMi64Array::fixed(SOMi64::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMi64Array::dynamic(SOMLengthField::U32, SOMi64::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMi64Array = arrays::SOMArrayType<SOMi64>;
+
+/// Type for a f32 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMf32Array::fixed(SOMf32::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMf32Array::dynamic(SOMLengthField::U32, SOMf32::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMf32Array = arrays::SOMArrayType<SOMf32>;
+
+/// Type for a f64 array.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj1 = SOMf64Array::fixed(SOMf64::empty(SOMEndian::Big), 3);
+///
+/// let obj2 = SOMf64Array::dynamic(SOMLengthField::U32, SOMf64::empty(SOMEndian::Big), 0, 3);
+/// ```
 pub type SOMf64Array = arrays::SOMArrayType<SOMf64>;
 
+/// Contains the struct types.
 pub(crate) mod structs {
     use super::*;
 
+    /// A struct type.
     #[derive(Debug, Clone)]
     pub struct SOMStructType<T: SOMType> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The members of the type.
         members: Vec<T>,
     }
 
     impl<T: SOMType> SOMStructType<T> {
+        /// Creates a new struct from the given members.
         pub fn from(members: Vec<T>) -> Self {
             SOMStructType {
                 meta: None,
@@ -1402,23 +1781,21 @@ pub(crate) mod structs {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Returns the number of members.
         pub fn len(&self) -> usize {
             self.members.len()
         }
 
+        /// Returns the members at given index, if any.
+        ///
+        /// Note: The index of the member shall be zero-based.
         pub fn get(&self, index: usize) -> Option<&T> {
             self.members.get(index)
         }
 
+        /// Returns the mutable members at given index, if any.
+        ///
+        /// Note: The index of the member shall be zero-based.
         pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
             self.members.get_mut(index)
         }
@@ -1463,25 +1840,60 @@ pub(crate) mod structs {
             self
         }
     }
+
+    impl<T: SOMType> SOMTypeWithMeta for SOMStructType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
 }
 
+/// Type for a struct member.
+///
+/// See also [SOMStruct]
 pub type SOMStructMember = wrapper::SOMTypeWrapper;
+
+/// Type for a struct.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMStruct::from(vec![
+///     SOMStructMember::Bool(SOMBool::from(true)),
+///     SOMStructMember::U16(SOMu16::from(SOMEndian::Big, 49200u16)),
+/// ]);
+/// ```
 pub type SOMStruct = structs::SOMStructType<SOMStructMember>;
 
+/// Contains the union types.
 pub(crate) mod unions {
     use super::*;
 
+    #[doc(hidden)]
     const INVALID_TYPE: usize = 0usize;
 
+    /// An union type.
+    ///
+    /// An union can have one of its members being selected to store its value.
     #[derive(Debug, Clone)]
     pub struct SOMUnionType<T: SOMType + Any> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The typefield of the type
         typefield: SOMTypeField,
+        /// The members of the type.
         members: Vec<T>,
+        /// The index of the currently selected member.
         index: usize,
     }
 
     impl<T: SOMType + Any> SOMUnionType<T> {
+        /// Creates a new union from the given members.
         pub fn from(typefield: SOMTypeField, members: Vec<T>) -> Self {
             SOMUnionType {
                 meta: None,
@@ -1491,23 +1903,19 @@ pub(crate) mod unions {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Returns the number of members.
         pub fn len(&self) -> usize {
             self.members.len()
         }
 
+        /// Returns if currently a member is being selected.
         pub fn has_value(&self) -> bool {
             self.index != INVALID_TYPE
         }
 
+        /// Selects the member at given index and returns true if successfully.
+        ///
+        /// Note: The index of the member shall be one-based.
         pub fn set(&mut self, index: usize) -> bool {
             if index != INVALID_TYPE && index <= self.len() {
                 self.index = index;
@@ -1517,6 +1925,7 @@ pub(crate) mod unions {
             false
         }
 
+        /// Returns the currently selected member, if any.
         pub fn get(&self) -> Option<&T> {
             if self.has_value() {
                 self.members.get(self.index - 1)
@@ -1525,6 +1934,9 @@ pub(crate) mod unions {
             }
         }
 
+        /// Selects and returns the mutable member at given index, if any.
+        ///
+        /// Note: The index of the member shall be one-based.
         pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
             if self.set(index) {
                 self.members.get_mut(index - 1)
@@ -1533,6 +1945,7 @@ pub(crate) mod unions {
             }
         }
 
+        /// Clears the currently selected member.
         pub fn clear(&mut self) {
             self.index = INVALID_TYPE;
         }
@@ -1591,38 +2004,81 @@ pub(crate) mod unions {
             self
         }
     }
+
+    impl<T: SOMType + Any> SOMTypeWithMeta for SOMUnionType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
 }
 
+/// Type for an union member.
+///
+/// See also [SOMUnion]
 pub type SOMUnionMember = wrapper::SOMTypeWrapper;
+
+/// Type for an union.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMUnion::from(
+///     SOMTypeField::U8,
+///     vec![
+///         SOMUnionMember::Bool(SOMBool::from(true)),
+///         SOMUnionMember::U16(SOMu16::from(SOMEndian::Big, 49200u16)),
+///     ],
+/// );
+///
+/// obj.set(1); // SOMUnionMember::Bool
+/// ```
 pub type SOMUnion = unions::SOMUnionType<SOMUnionMember>;
 
+/// Contains the enum types.
 pub(crate) mod enums {
     use super::*;
 
+    /// An enum item type.
     #[derive(Debug, Clone)]
     pub struct SOMEnumTypeItem<T> {
+        /// The key of the item.
         key: String,
+        /// The value of the item.
         value: T,
     }
 
     impl<T> SOMEnumTypeItem<T> {
+        /// Creates a new item from the given key and value.
         pub fn from(key: String, value: T) -> Self {
             SOMEnumTypeItem { key, value }
         }
 
+        /// Returns a tuple of the item's key and value.
         pub(crate) fn get(&self) -> (&str, &T) {
             (&self.key, &self.value)
         }
     }
 
+    /// An enum type.
+    ///
+    /// An enum can have one of its elements being selected to represent its value.
     #[derive(Debug, Clone)]
     pub struct SOMEnumType<T> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The elements of the type.
         elements: Vec<SOMEnumTypeItem<T>>,
+        /// The index of the currently selected member.
         index: usize,
     }
 
     impl<T: Copy + PartialEq> SOMEnumType<T> {
+        /// Creates a new enum from the given elements.
         pub fn from(elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumType {
                 meta: None,
@@ -1631,41 +2087,26 @@ pub(crate) mod enums {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Returns the number of elements.
         pub fn len(&self) -> usize {
             self.elements.len()
         }
 
+        /// Returns if currently an element is being selected.
         pub fn has_value(&self) -> bool {
             self.index != 0
         }
 
-        pub fn get(&self) -> Option<T> {
-            if let Some(element) = self.value() {
+        /// Returns the currently selected element's value, if any.
+        pub fn get_value(&self) -> Option<T> {
+            if let Some(element) = self.get() {
                 return Some(element.value);
             }
 
             None
         }
 
-        pub(crate) fn value(&self) -> Option<&SOMEnumTypeItem<T>> {
-            if self.has_value() {
-                if let Some(element) = self.elements.get(self.index - 1) {
-                    return Some(element);
-                }
-            }
-
-            None
-        }
-
+        /// Selects the element with the given key and returns true if successfully.
         pub fn set(&mut self, key: String) -> bool {
             let mut index: usize = 0;
             for element in &self.elements {
@@ -1679,10 +2120,21 @@ pub(crate) mod enums {
             false
         }
 
+        /// Returns the currently selected element, if any.
+        pub(crate) fn get(&self) -> Option<&SOMEnumTypeItem<T>> {
+            if self.has_value() {
+                self.elements.get(self.index - 1)
+            } else {
+                None
+            }
+        }
+
+        /// Clears the currently selected element.
         pub fn clear(&mut self) {
             self.index = 0;
         }
 
+        #[doc(hidden)]
         fn apply(&mut self, value: T) -> bool {
             let mut index: usize = 0;
             for element in &self.elements {
@@ -1697,13 +2149,30 @@ pub(crate) mod enums {
         }
     }
 
+    impl<T: Copy + PartialEq> SOMTypeWithMeta for SOMEnumType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
+
+    /// An enum type with endianness.
+    ///
+    /// An enum can have one of its elements being selected to represent its value.
     #[derive(Debug, Clone)]
     pub struct SOMEnumTypeWithEndian<T> {
+        /// The contained enum type.
         enumeration: SOMEnumType<T>,
+        /// The endianness of the type.
         endian: SOMEndian,
     }
 
     impl<T: Copy + PartialEq> SOMEnumTypeWithEndian<T> {
+        /// Creates a new enum from the given elements.
         pub fn from(endian: SOMEndian, elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumTypeWithEndian {
                 enumeration: SOMEnumType::from(elements),
@@ -1711,37 +2180,45 @@ pub(crate) mod enums {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.enumeration = self.enumeration.with_meta(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.enumeration.meta()
-        }
-
+        /// Returns the number of elements.
         pub fn len(&self) -> usize {
             self.enumeration.len()
         }
 
+        /// Returns if currently an element is being selected.
         pub fn has_value(&self) -> bool {
             self.enumeration.has_value()
         }
 
-        pub fn get(&self) -> Option<T> {
-            self.enumeration.get()
+        /// Returns the currently selected element's value, if any.
+        pub fn get_value(&self) -> Option<T> {
+            self.enumeration.get_value()
         }
 
+        /// Selects the element with the given key and returns true if successfully.
         pub fn set(&mut self, key: String) -> bool {
             self.enumeration.set(key)
         }
 
+        /// Clears the currently selected element.
         pub fn clear(&mut self) {
             self.enumeration.clear()
         }
 
+        /// Returns the contained enum type.
         pub(crate) fn enumeration(&self) -> &SOMEnumType<T> {
             &self.enumeration
+        }
+    }
+
+    impl<T: Copy + PartialEq> SOMTypeWithMeta for SOMEnumTypeWithEndian<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.enumeration = self.enumeration.with_meta(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.enumeration.meta()
         }
     }
 
@@ -1750,7 +2227,7 @@ pub(crate) mod enums {
             let offset = serializer.offset();
 
             if self.has_value() {
-                if let Some(value) = self.get() {
+                if let Some(value) = self.get_value() {
                     let mut temp = SOMu8::empty();
                     temp.set(value);
                     temp.serialize(serializer)?;
@@ -1802,7 +2279,7 @@ pub(crate) mod enums {
             let offset = serializer.offset();
 
             if self.has_value() {
-                if let Some(value) = self.get() {
+                if let Some(value) = self.get_value() {
                     let mut temp = SOMu16::empty(self.endian);
                     temp.set(value);
                     temp.serialize(serializer)?;
@@ -1854,7 +2331,7 @@ pub(crate) mod enums {
             let offset = serializer.offset();
 
             if self.has_value() {
-                if let Some(value) = self.get() {
+                if let Some(value) = self.get_value() {
                     let mut temp = SOMu32::empty(self.endian);
                     temp.set(value);
                     temp.serialize(serializer)?;
@@ -1906,7 +2383,7 @@ pub(crate) mod enums {
             let offset = serializer.offset();
 
             if self.has_value() {
-                if let Some(value) = self.get() {
+                if let Some(value) = self.get_value() {
                     let mut temp = SOMu64::empty(self.endian);
                     temp.set(value);
                     temp.serialize(serializer)?;
@@ -1954,36 +2431,131 @@ pub(crate) mod enums {
     }
 }
 
-pub type SOMEnum<T> = enums::SOMEnumTypeItem<T>;
+/// Type for a u8 enum item.
+///
+/// See also [SOMu8Enum]
+pub type SOMu8EnumItem = enums::SOMEnumTypeItem<u8>;
+
+/// Type for a u8 enum.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMu8Enum::from(vec![
+///     SOMu8EnumItem::from(String::from("A"), 0u8),
+///     SOMu8EnumItem::from(String::from("B"), 1u8),
+/// ]);
+///
+/// obj.set(String::from("A"));
+/// ```
 pub type SOMu8Enum = enums::SOMEnumType<u8>;
+
+/// Type for a u16 enum item.
+///
+/// See also [SOMu16Enum]
+pub type SOMu16EnumItem = enums::SOMEnumTypeItem<u16>;
+
+/// Type for a u16 enum.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMu16Enum::from(
+///     SOMEndian::Big,
+///     vec![
+///         SOMu16EnumItem::from(String::from("A"), 49200u16),
+///         SOMu16EnumItem::from(String::from("B"), 49201u16),
+///     ]
+/// );
+///
+/// obj.set(String::from("A"));
+/// ```
 pub type SOMu16Enum = enums::SOMEnumTypeWithEndian<u16>;
+
+/// Type for a u32 enum item.
+///
+/// See also [SOMu32Enum]
+pub type SOMu32EnumItem = enums::SOMEnumTypeItem<u32>;
+
+/// Type for a u32 enum.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMu32Enum::from(
+///     SOMEndian::Big,
+///     vec![
+///         SOMu32EnumItem::from(String::from("A"), 3405691580u32),
+///         SOMu32EnumItem::from(String::from("B"), 3405691581u32),
+///     ]
+/// );
+///
+/// obj.set(String::from("A"));
+/// ```
 pub type SOMu32Enum = enums::SOMEnumTypeWithEndian<u32>;
+
+/// Type for a u64 enum item.
+///
+/// See also [SOMu64Enum]
+pub type SOMu64EnumItem = enums::SOMEnumTypeItem<u64>;
+
+/// Type for a u64 enum.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMu64Enum::from(
+///     SOMEndian::Big,
+///     vec![
+///         SOMu64EnumItem::from(String::from("A"), 16045704242864831160u64),
+///         SOMu64EnumItem::from(String::from("B"), 16045704242864831161u64),
+///     ]
+/// );
+///
+/// obj.set(String::from("A"));
+/// ```
 pub type SOMu64Enum = enums::SOMEnumTypeWithEndian<u64>;
 
+/// Contains the string types.
 pub(crate) mod strings {
     use super::*;
 
+    #[doc(hidden)]
     const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
+    #[doc(hidden)]
     const UTF8_TERMINATION: [u8; 1] = [0x00];
+    #[doc(hidden)]
     const UTF16_BOM_BE: [u8; 2] = [0xFE, 0xFF];
+    #[doc(hidden)]
     const UTF16_BOM_LE: [u8; 2] = [0xFF, 0xFE];
+    #[doc(hidden)]
     const UTF16_TERMINATION: [u8; 2] = [0x00, 0x00];
 
+    /// Different kinds of string encodings.
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub enum SOMStringEncoding {
+        /// UTF-8 encoding
         Utf8,
+        /// UTF-16 big-endian encoding
         Utf16Be,
+        /// UTF-16 little-endian encoding
         Utf16Le,
     }
 
+    /// Different kinds of string formats.
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub enum SOMStringFormat {
+        /// Plain string format.
         Plain,
+        /// String format with leading BOM.
         WithBOM,
+        /// String format with termination.
         WithTermination,
+        /// String format with leading BOM and termination
         WithBOMandTermination,
     }
 
+    #[doc(hidden)]
     fn char_size(encoding: SOMStringEncoding) -> usize {
         match encoding {
             SOMStringEncoding::Utf8 => std::mem::size_of::<u8>(),
@@ -1991,6 +2563,7 @@ pub(crate) mod strings {
         }
     }
 
+    #[doc(hidden)]
     fn char_len(encoding: SOMStringEncoding, bytes: &[u8]) -> usize {
         let bytes_len = bytes.len();
         let char_size = char_size(encoding);
@@ -2003,6 +2576,7 @@ pub(crate) mod strings {
         char_len
     }
 
+    #[doc(hidden)]
     fn bom(encoding: SOMStringEncoding) -> Vec<u8> {
         match encoding {
             SOMStringEncoding::Utf8 => UTF8_BOM.to_vec(),
@@ -2011,6 +2585,7 @@ pub(crate) mod strings {
         }
     }
 
+    #[doc(hidden)]
     fn termination(encoding: SOMStringEncoding) -> Vec<u8> {
         match encoding {
             SOMStringEncoding::Utf8 => UTF8_TERMINATION.to_vec(),
@@ -2018,6 +2593,7 @@ pub(crate) mod strings {
         }
     }
 
+    #[doc(hidden)]
     fn string_len(encoding: SOMStringEncoding, format: SOMStringFormat, value: &str) -> usize {
         let bom_len = char_len(encoding, &bom(encoding));
         let termination_len = char_len(encoding, &termination(encoding));
@@ -2031,18 +2607,30 @@ pub(crate) mod strings {
             }
     }
 
+    /// A string type.
+    ///
+    /// A string is either of fixed or dynamic length and
+    /// consists of its value and an optional BOM and termination.
     #[derive(Debug, Clone)]
     pub struct SOMStringType {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The lengthfield of the type.
         lengthfield: SOMLengthField,
+        /// The encoding of the type.
         encoding: SOMStringEncoding,
+        /// The format of the type.
         format: SOMStringFormat,
+        /// The value of the type.
         value: String,
+        /// Minimum number of chars necessary.
         min: usize,
+        /// Maximum number of chars allowed.
         max: usize,
     }
 
     impl SOMStringType {
+        /// Creates a new array from the given value.
         pub fn from(
             lengthfield: SOMLengthField,
             encoding: SOMStringEncoding,
@@ -2062,6 +2650,7 @@ pub(crate) mod strings {
             }
         }
 
+        /// Creates a new empty string of fixed length.
         pub fn fixed(encoding: SOMStringEncoding, format: SOMStringFormat, max: usize) -> Self {
             SOMStringType {
                 meta: None,
@@ -2074,6 +2663,7 @@ pub(crate) mod strings {
             }
         }
 
+        /// Creates a new empty string of dynamic length.
         pub fn dynamic(
             lengthfield: SOMLengthField,
             encoding: SOMStringEncoding,
@@ -2092,38 +2682,18 @@ pub(crate) mod strings {
             }
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
-        pub fn len(&self) -> usize {
-            string_len(self.encoding, self.format, &self.value)
-        }
-
-        fn bom(&self) -> Vec<u8> {
-            match self.encoding {
-                SOMStringEncoding::Utf8 => UTF8_BOM.to_vec(),
-                SOMStringEncoding::Utf16Be => UTF16_BOM_BE.to_vec(),
-                SOMStringEncoding::Utf16Le => UTF16_BOM_LE.to_vec(),
-            }
-        }
-
-        fn termination(&self) -> Vec<u8> {
-            match self.encoding {
-                SOMStringEncoding::Utf8 => UTF8_TERMINATION.to_vec(),
-                _ => UTF16_TERMINATION.to_vec(),
-            }
-        }
-
+        /// Returns whether this string is dynamic.
         pub fn is_dynamic(&self) -> bool {
             (self.min != self.max) || (self.lengthfield != SOMLengthField::None)
         }
 
+        /// Returns the current number of chars,
+        /// including any optional BOM and termination.
+        pub fn len(&self) -> usize {
+            string_len(self.encoding, self.format, &self.value)
+        }
+
+        /// Returns whether this string has a BOM.
         pub fn has_bom(&self) -> bool {
             matches!(
                 self.format,
@@ -2131,6 +2701,7 @@ pub(crate) mod strings {
             )
         }
 
+        /// Returns whether this string has a termination.
         pub fn has_termination(&self) -> bool {
             matches!(
                 self.format,
@@ -2138,6 +2709,9 @@ pub(crate) mod strings {
             )
         }
 
+        /// Sets the value of this string and returns true if successfully.
+        ///
+        /// Note: The given value shall be without any optional BOM and termination.
         pub fn set(&mut self, value: String) -> bool {
             if string_len(self.encoding, self.format, &value) <= self.max {
                 self.value = value;
@@ -2147,14 +2721,19 @@ pub(crate) mod strings {
             false
         }
 
+        /// Resturns the value of this string.
+        ///
+        /// Note: The given value will be without any optional BOM and termination.
         pub fn get(&self) -> &str {
             &self.value
         }
 
+        /// Clears the value of this string.
         pub fn clear(&mut self) {
             self.value = String::from("");
         }
 
+        #[doc(hidden)]
         fn endian(&self) -> SOMEndian {
             match self.encoding {
                 SOMStringEncoding::Utf8 => SOMEndian::Big,
@@ -2163,6 +2742,24 @@ pub(crate) mod strings {
             }
         }
 
+        #[doc(hidden)]
+        fn bom(&self) -> Vec<u8> {
+            match self.encoding {
+                SOMStringEncoding::Utf8 => UTF8_BOM.to_vec(),
+                SOMStringEncoding::Utf16Be => UTF16_BOM_BE.to_vec(),
+                SOMStringEncoding::Utf16Le => UTF16_BOM_LE.to_vec(),
+            }
+        }
+
+        #[doc(hidden)]
+        fn termination(&self) -> Vec<u8> {
+            match self.encoding {
+                SOMStringEncoding::Utf8 => UTF8_TERMINATION.to_vec(),
+                _ => UTF16_TERMINATION.to_vec(),
+            }
+        }
+
+        #[doc(hidden)]
         fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
@@ -2353,17 +2950,60 @@ pub(crate) mod strings {
             self
         }
     }
+
+    impl SOMTypeWithMeta for SOMStringType {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
 }
 
+/// Type for a string encoding.
+///
+/// See also [SOMString]
 pub type SOMStringEncoding = strings::SOMStringEncoding;
+
+/// Type for a string format.
+///
+/// See also [SOMString]
 pub type SOMStringFormat = strings::SOMStringFormat;
+
+/// Type for a string.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj1 = SOMString::fixed(
+///     SOMStringEncoding::Utf8,
+///     SOMStringFormat::Plain,
+///     3, // max
+/// );
+/// obj1.set(String::from("foo"));
+///
+/// let mut obj2 = SOMString::dynamic(
+///     SOMLengthField::U32,
+///     SOMStringEncoding::Utf16Be,
+///     SOMStringFormat::WithBOMandTermination,
+///     2, // min
+///     5, // max
+/// );
+/// obj2.set(String::from("bar"));
+/// ```
 pub type SOMString = strings::SOMStringType;
 
+/// Contains the optional types.
 pub(crate) mod optionals {
     use super::*;
 
+    #[doc(hidden)]
     const TAG_MASK: u16 = 0x7FFF;
 
+    #[doc(hidden)]
     fn wire_type<T: SOMType>(value: &T) -> Option<usize> {
         match value.category() {
             SOMTypeCategory::FixedLength => match value.size() {
@@ -2377,6 +3017,7 @@ pub(crate) mod optionals {
         }
     }
 
+    #[doc(hidden)]
     fn wire_size(wiretype: usize) -> Option<usize> {
         match wiretype {
             0 => Some(1),
@@ -2387,23 +3028,30 @@ pub(crate) mod optionals {
         }
     }
 
+    /// An optional item type.
     #[derive(Debug, Clone)]
     pub struct SOMOptionalTypeItem<T: SOMType> {
+        /// The wiretype of the item.
         wiretype: usize,
+        /// The key of the item.
         key: usize,
+        /// The value of the item.
         value: T,
-        mandatory: bool,
+        /// Singals if the item is required.
+        required: bool,
+        /// Singals if the item is set.
         set: bool,
     }
 
     impl<T: SOMType> SOMOptionalTypeItem<T> {
-        fn from(key: usize, value: T, mandatory: bool) -> Option<Self> {
+        /// Creates a new item from the given key and value.
+        fn from(key: usize, value: T, required: bool) -> Option<Self> {
             if let Some(wiretype) = wire_type(&value) {
                 return Some(SOMOptionalTypeItem {
                     wiretype,
                     key,
                     value,
-                    mandatory,
+                    required,
                     set: false,
                 });
             }
@@ -2411,27 +3059,37 @@ pub(crate) mod optionals {
             None
         }
 
+        /// Returns true if the item is marked as set.
         pub(crate) fn is_set(&self) -> bool {
             self.set
         }
 
+        /// Returns a tuple of the item's key and value.
         pub(crate) fn get(&self) -> (usize, &T) {
             (self.key, &self.value)
         }
 
+        #[doc(hidden)]
         fn tag(&self) -> u16 {
             TAG_MASK & (((self.wiretype as u16) << 12) | ((self.key as u16) & 0x0FFF))
         }
     }
 
+    /// An optional type.
+    ///
+    /// An optional can have its members being partially set.
     #[derive(Debug, Clone)]
     pub struct SOMOptionalType<T: SOMType> {
+        /// Optional metadata of the type.
         meta: Option<SOMTypeMeta>,
+        /// The lengthfield of the type.
         lengthfield: SOMLengthField,
+        /// The members of the type.
         members: Vec<SOMOptionalTypeItem<T>>,
     }
 
     impl<T: SOMType> SOMOptionalType<T> {
+        /// Creates a new optional from the given members.
         pub fn from(lengthfield: SOMLengthField, members: Vec<SOMOptionalTypeItem<T>>) -> Self {
             SOMOptionalType {
                 meta: None,
@@ -2440,6 +3098,7 @@ pub(crate) mod optionals {
             }
         }
 
+        /// Returns a new required item or an error.
         pub fn required(key: usize, value: T) -> Result<SOMOptionalTypeItem<T>, SOMTypeError> {
             if let Some(result) = SOMOptionalTypeItem::from(key, value, true) {
                 return Ok(result);
@@ -2451,6 +3110,7 @@ pub(crate) mod optionals {
             )))
         }
 
+        /// Returns a new optional item or an error.
         pub fn optional(key: usize, value: T) -> Result<SOMOptionalTypeItem<T>, SOMTypeError> {
             if let Some(result) = SOMOptionalTypeItem::from(key, value, false) {
                 return Ok(result);
@@ -2462,22 +3122,15 @@ pub(crate) mod optionals {
             )))
         }
 
-        pub fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
-            self.meta = Some(meta);
-            self
-        }
-
-        pub fn meta(&self) -> Option<&SOMTypeMeta> {
-            self.meta.as_ref()
-        }
-
+        /// Returns the number of members.
         pub fn len(&self) -> usize {
             self.members.len()
         }
 
-        pub fn is_mandatory(&self, key: usize) -> bool {
+        /// Returns true if the member with the given key is required.
+        pub fn is_required(&self, key: usize) -> bool {
             for member in &self.members {
-                if (member.key == key) && member.mandatory {
+                if (member.key == key) && member.required {
                     return true;
                 }
             }
@@ -2485,6 +3138,7 @@ pub(crate) mod optionals {
             false
         }
 
+        /// Returns true if the member with the given key is set.
         pub fn is_set(&self, key: usize) -> bool {
             for member in &self.members {
                 if (member.key == key) && member.set {
@@ -2495,6 +3149,7 @@ pub(crate) mod optionals {
             false
         }
 
+        /// Returns the member with the given key, if any.
         pub fn get(&self, key: usize) -> Option<&T> {
             for member in &self.members {
                 if (member.key == key) && member.set {
@@ -2505,6 +3160,7 @@ pub(crate) mod optionals {
             None
         }
 
+        /// Returns the mutable member with the given key, if any.
         pub fn get_mut(&mut self, key: usize) -> Option<&mut T> {
             for member in &mut self.members {
                 if member.key == key {
@@ -2516,12 +3172,14 @@ pub(crate) mod optionals {
             None
         }
 
+        /// Clears the set state of all members.
         pub fn clear(&mut self) {
             for member in &mut self.members {
                 member.set = false;
             }
         }
 
+        /// Returns the list of members.
         pub(crate) fn members(&self) -> &Vec<SOMOptionalTypeItem<T>> {
             &self.members
         }
@@ -2548,9 +3206,9 @@ pub(crate) mod optionals {
                     } else {
                         member.value.serialize(serializer)?;
                     }
-                } else if member.mandatory {
+                } else if member.required {
                     return Err(SOMTypeError::InvalidType(format!(
-                        "Uninitialized mandatory member {} at offset {}",
+                        "Uninitialized required member {} at offset {}",
                         member.key, offset
                     )));
                 }
@@ -2610,9 +3268,9 @@ pub(crate) mod optionals {
             }
 
             for member in &mut self.members {
-                if member.mandatory && !member.set {
+                if member.required && !member.set {
                     return Err(SOMTypeError::InvalidPayload(format!(
-                        "Uninitialized mandatory member {} at offset {}",
+                        "Uninitialized required member {} at offset {}",
                         member.key, offset
                     )));
                 }
@@ -2654,15 +3312,50 @@ pub(crate) mod optionals {
             self
         }
     }
+
+    impl<T: SOMType> SOMTypeWithMeta for SOMOptionalType<T> {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
 }
 
+/// Type for an optional member.
+///
+/// See also [SOMOptional]
 pub type SOMOptionalMember = wrapper::SOMTypeWrapper;
+
+/// Type for an optional.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let mut obj = SOMOptional::from(
+///     SOMLengthField::U16,
+///     vec![
+///         SOMOptional::required(1, SOMOptionalMember::Bool(SOMBool::empty()))?,
+///         SOMOptional::optional(2, SOMOptionalMember::U16(SOMu16::empty(SOMEndian::Big)))?,
+///     ],
+/// );
+///
+/// if let Some(SOMUnionMember::Bool(member)) = obj.get_mut(1) {
+///    member.set(true);
+/// }
+/// # Ok::<(), SOMTypeError>(())
+/// ```
 pub type SOMOptional = optionals::SOMOptionalType<SOMOptionalMember>;
 
+/// Contains the type wrappers.
 pub(crate) mod wrapper {
     use super::*;
     use std::fmt::{Display, Formatter, Result as FmtResult};
 
+    #[doc(hidden)]
     macro_rules! som_type_wrapper {
         ([$($value:tt($type:tt),)*]) => {
             #[derive(Debug, Clone)]
@@ -2835,12 +3528,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             let mut obj = SOMBool::empty();
@@ -2859,12 +3552,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             let obj = SOMu8::empty();
@@ -2882,12 +3575,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             let obj = SOMi8::empty();
@@ -2910,12 +3603,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 1],
-                "Serializer exausted at offset 0 for Object size 2",
+                "Serializer exhausted at offset 0 for Object size 2",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 1],
-                "Parser exausted at offset 0 for Object size 2",
+                "Parser exhausted at offset 0 for Object size 2",
             );
 
             let obj = SOMu16::empty(SOMEndian::Big);
@@ -2938,12 +3631,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 1],
-                "Serializer exausted at offset 0 for Object size 2",
+                "Serializer exhausted at offset 0 for Object size 2",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 1],
-                "Parser exausted at offset 0 for Object size 2",
+                "Parser exhausted at offset 0 for Object size 2",
             );
 
             let obj = SOMi16::empty(SOMEndian::Big);
@@ -2966,12 +3659,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 2],
-                "Serializer exausted at offset 0 for Object size 3",
+                "Serializer exhausted at offset 0 for Object size 3",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 2],
-                "Parser exausted at offset 0 for Object size 3",
+                "Parser exhausted at offset 0 for Object size 3",
             );
 
             let obj = SOMu24::empty(SOMEndian::Big);
@@ -2994,12 +3687,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 2],
-                "Serializer exausted at offset 0 for Object size 3",
+                "Serializer exhausted at offset 0 for Object size 3",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 2],
-                "Parser exausted at offset 0 for Object size 3",
+                "Parser exhausted at offset 0 for Object size 3",
             );
 
             let obj = SOMi24::empty(SOMEndian::Big);
@@ -3022,12 +3715,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 3],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 3],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             let obj = SOMu32::empty(SOMEndian::Big);
@@ -3050,12 +3743,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 3],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 3],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             let obj = SOMi32::empty(SOMEndian::Big);
@@ -3086,12 +3779,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 7],
-                "Serializer exausted at offset 0 for Object size 8",
+                "Serializer exhausted at offset 0 for Object size 8",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 7],
-                "Parser exausted at offset 0 for Object size 8",
+                "Parser exhausted at offset 0 for Object size 8",
             );
 
             let obj = SOMu64::empty(SOMEndian::Big);
@@ -3122,12 +3815,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 7],
-                "Serializer exausted at offset 0 for Object size 8",
+                "Serializer exhausted at offset 0 for Object size 8",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 7],
-                "Parser exausted at offset 0 for Object size 8",
+                "Parser exhausted at offset 0 for Object size 8",
             );
 
             let obj = SOMi64::empty(SOMEndian::Big);
@@ -3150,12 +3843,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 3],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 3],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             let obj = SOMf32::empty(SOMEndian::Big);
@@ -3186,12 +3879,12 @@ mod tests {
             serialize_fail(
                 &obj,
                 &mut [0u8; 7],
-                "Serializer exausted at offset 0 for Object size 8",
+                "Serializer exhausted at offset 0 for Object size 8",
             );
             parse_fail(
                 &mut obj,
                 &[0u8; 7],
-                "Parser exausted at offset 0 for Object size 8",
+                "Parser exhausted at offset 0 for Object size 8",
             );
 
             let obj = SOMf64::empty(SOMEndian::Big);
@@ -3229,7 +3922,7 @@ mod tests {
                 &obj1,
                 &mut obj2,
                 &[
-                    0x01, // Bool-Memeber
+                    0x01, // Bool-Member
                     0xC0, 0x30, // U16-Member
                 ],
             );
@@ -3250,12 +3943,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 2],
-                "Serializer exausted at offset 1 for Object size 2",
+                "Serializer exhausted at offset 1 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 2],
-                "Parser exausted at offset 1 for Object size 2",
+                "Parser exhausted at offset 1 for Object size 2",
             );
         }
 
@@ -3332,12 +4025,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 5],
-                "Serializer exausted at offset 5 for Object size 1",
+                "Serializer exhausted at offset 5 for Object size 1",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 5],
-                "Parser exausted at offset 5 for Object size 1",
+                "Parser exhausted at offset 5 for Object size 1",
             );
         }
 
@@ -3410,9 +4103,9 @@ mod tests {
                 &mut obj2,
                 &[
                     0x03, // Length-Field (U8)
-                    0x01, // Array-Mamber (U8)
-                    0x02, // Array-Mamber (U8)
-                    0x03, // Array-Mamber (U8)
+                    0x01, // Array-Member (U8)
+                    0x02, // Array-Member (U8)
+                    0x03, // Array-Member (U8)
                 ],
             );
             assert_eq!(1, obj2.len());
@@ -3481,12 +4174,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
         }
 
@@ -3494,7 +4187,7 @@ mod tests {
         {
             let mut obj1 = SOMStruct::from(vec![SOMStructMember::EnumU16(SOMu16Enum::from(
                 SOMEndian::Little,
-                vec![SOMEnum::from(String::from("A"), 49200u16)],
+                vec![SOMu16EnumItem::from(String::from("A"), 49200u16)],
             ))]);
             assert_eq!(1, obj1.len());
 
@@ -3506,7 +4199,7 @@ mod tests {
 
             let mut obj2 = SOMStruct::from(vec![SOMStructMember::EnumU16(SOMu16Enum::from(
                 SOMEndian::Little,
-                vec![SOMEnum::from(String::from("A"), 49200u16)],
+                vec![SOMu16EnumItem::from(String::from("A"), 49200u16)],
             ))]);
             assert_eq!(1, obj2.len());
 
@@ -3520,7 +4213,7 @@ mod tests {
             assert_eq!(1, obj2.len());
 
             if let Some(SOMStructMember::EnumU16(sub)) = obj2.get(0) {
-                assert_eq!(49200u16, sub.get().unwrap());
+                assert_eq!(49200u16, sub.get_value().unwrap());
             } else {
                 panic!();
             }
@@ -3528,12 +4221,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 2",
+                "Serializer exhausted at offset 0 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 2",
+                "Parser exhausted at offset 0 for Object size 2",
             );
         }
 
@@ -3591,9 +4284,9 @@ mod tests {
                 &obj1,
                 &mut obj2,
                 &[
-                    0x66, 0x6F, 0x6F, // String-Memeber (UTF8)
-                    0x06, // Lenght-Field (U8)
-                    0x00, 0x62, 0x00, 0x61, 0x00, 0x72, // String-Memeber (UTF16)
+                    0x66, 0x6F, 0x6F, // String-Member (UTF8)
+                    0x06, // Length-Field (U8)
+                    0x00, 0x62, 0x00, 0x61, 0x00, 0x72, // String-Member (UTF16)
                 ],
             );
             assert_eq!(2, obj2.len());
@@ -3639,7 +4332,7 @@ mod tests {
                 &obj1,
                 &mut obj2,
                 &[
-                    0x00, 0x00, 0x00, 0x03, // Lenght-Field (U32)
+                    0x00, 0x00, 0x00, 0x03, // Length-Field (U32)
                     0x00, 0x01, // TLV-Tag (U16)
                     0x01, // Bool-Member
                 ],
@@ -3705,12 +4398,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 5],
-                "Serializer exausted at offset 4 for Object size 2",
+                "Serializer exhausted at offset 4 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 5],
-                "Parser exausted at offset 4 for Object size 2",
+                "Parser exhausted at offset 4 for Object size 2",
             );
 
             obj1.clear();
@@ -3755,23 +4448,23 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 3],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 3],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             serialize_fail(
                 &obj1,
                 &mut [0u8; 9],
-                "Serializer exausted at offset 8 for Object size 2",
+                "Serializer exhausted at offset 8 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0x00, 0x00, 0x00, 0x01],
-                "Parser exausted at offset 4 for Object size 2",
+                "Parser exhausted at offset 4 for Object size 2",
             );
 
             obj1.clear();
@@ -3942,12 +4635,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             parse_fail(&mut obj2, &[0x03], "Invalid Union index 3 at offset 0");
@@ -4023,12 +4716,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 2",
+                "Serializer exhausted at offset 0 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 2",
+                "Parser exhausted at offset 0 for Object size 2",
             );
 
             obj1.clear();
@@ -4043,16 +4736,16 @@ mod tests {
             let mut obj = SOMu8Enum::from(vec![]);
             assert_eq!(0, obj.len());
             assert!(!obj.has_value());
-            assert!(obj.get().is_none());
+            assert!(obj.get_value().is_none());
             assert!(!obj.set(String::from("foo")));
-            assert!(obj.get().is_none());
+            assert!(obj.get_value().is_none());
         }
 
         // u8 enum
         {
             let mut obj1 = SOMu8Enum::from(vec![
-                SOMEnum::from(String::from("A"), 23u8),
-                SOMEnum::from(String::from("B"), 42u8),
+                SOMu8EnumItem::from(String::from("A"), 23u8),
+                SOMu8EnumItem::from(String::from("B"), 42u8),
             ]);
             assert_eq!(2, obj1.len());
             assert!(!obj1.has_value());
@@ -4063,7 +4756,7 @@ mod tests {
 
             assert!(obj1.set(String::from("A")));
             assert!(obj1.has_value());
-            assert_eq!(23u8, obj1.get().unwrap());
+            assert_eq!(23u8, obj1.get_value().unwrap());
 
             serialize_parse(
                 &obj1,
@@ -4075,17 +4768,17 @@ mod tests {
 
             assert_eq!(2, obj2.len());
             assert!(obj2.has_value());
-            assert_eq!(23u8, obj2.get().unwrap());
+            assert_eq!(23u8, obj2.get_value().unwrap());
 
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             parse_fail(&mut obj2, &[0u8; 1], "Invalid Enum value 0 at offset 0");
@@ -4099,8 +4792,8 @@ mod tests {
             let mut obj1 = SOMu16Enum::from(
                 SOMEndian::Big,
                 vec![
-                    SOMEnum::from(String::from("A"), 49200u16),
-                    SOMEnum::from(String::from("B"), 49201u16),
+                    SOMu16EnumItem::from(String::from("A"), 49200u16),
+                    SOMu16EnumItem::from(String::from("B"), 49201u16),
                 ],
             );
             assert_eq!(2, obj1.len());
@@ -4112,7 +4805,7 @@ mod tests {
 
             assert!(obj1.set(String::from("B")));
             assert!(obj1.has_value());
-            assert_eq!(49201u16, obj1.get().unwrap());
+            assert_eq!(49201u16, obj1.get_value().unwrap());
 
             serialize_parse(
                 &obj1,
@@ -4124,17 +4817,17 @@ mod tests {
 
             assert_eq!(2, obj2.len());
             assert!(obj2.has_value());
-            assert_eq!(49201u16, obj2.get().unwrap());
+            assert_eq!(49201u16, obj2.get_value().unwrap());
 
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 2",
+                "Serializer exhausted at offset 0 for Object size 2",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 2",
+                "Parser exhausted at offset 0 for Object size 2",
             );
 
             parse_fail(&mut obj2, &[0u8; 2], "Invalid Enum value 0 at offset 0");
@@ -4147,20 +4840,23 @@ mod tests {
         {
             let mut obj1 = SOMu32Enum::from(
                 SOMEndian::Big,
-                vec![SOMEnum::from(String::from("A"), 3405691582u32)],
+                vec![SOMu32EnumItem::from(String::from("A"), 3405691582u32)],
             );
             let mut obj2 = obj1.clone();
             assert!(obj1.set(String::from("A")));
 
             serialize_parse(&obj1, &mut obj2, &[0xCA, 0xFE, 0xBA, 0xBE]);
-            assert_eq!(3405691582u32, obj2.get().unwrap());
+            assert_eq!(3405691582u32, obj2.get_value().unwrap());
         }
 
         // u64 enum
         {
             let mut obj1 = SOMu64Enum::from(
                 SOMEndian::Big,
-                vec![SOMEnum::from(String::from("A"), 16045704242864831166u64)],
+                vec![SOMu64EnumItem::from(
+                    String::from("A"),
+                    16045704242864831166u64,
+                )],
             );
             let mut obj2 = obj1.clone();
             assert!(obj1.set(String::from("A")));
@@ -4170,7 +4866,7 @@ mod tests {
                 &mut obj2,
                 &[0xDE, 0xAD, 0xCA, 0xFE, 0xBE, 0xEF, 0xBA, 0xBE],
             );
-            assert_eq!(16045704242864831166u64, obj2.get().unwrap());
+            assert_eq!(16045704242864831166u64, obj2.get_value().unwrap());
         }
     }
 
@@ -4278,12 +4974,12 @@ mod tests {
             serialize_fail(
                 &obj2,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 1",
+                "Serializer exhausted at offset 0 for Object size 1",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 1",
+                "Parser exhausted at offset 0 for Object size 1",
             );
 
             obj1.clear();
@@ -4427,12 +5123,12 @@ mod tests {
             serialize_fail(
                 &obj2,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             obj1.clear();
@@ -4634,7 +5330,7 @@ mod tests {
                 &[
                     0x00, 0x00, 0x00, 0x07, // Length-Field (U32)
                     0x00, 0x01, // TLV-Tag (U16)
-                    0x01, // Bool-Memeber
+                    0x01, // Bool-Member
                     0x10, 0x02, // TLV-Tag (U16)
                     0xC0, 0x30, // U16-Member
                 ],
@@ -4657,12 +5353,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             obj1.clear();
@@ -4728,15 +5424,15 @@ mod tests {
                 &[
                     0x00, 0x00, 0x00, 0x15, // Length-Field (U32)
                     0x00, 0x01, // TLV-Tag (U16)
-                    0x01, // Bool-Memeber
+                    0x01, // Bool-Member
                     0x40, 0x02, // TLV-Tag (U16)
                     0x00, 0x00, 0x00, 0x03, // Length-Field (U32)
                     0x66, 0x6F, 0x6F, // String-Member
                     0x40, 0x03, // TLV-Tag (U16)
                     0x06, // Length-Field (U8)
-                    0x00, 0x01, // Array-Mamber (U16)
-                    0x00, 0x02, // Array-Mamber (U16)
-                    0x00, 0x03, // Array-Mamber (U16)
+                    0x00, 0x01, // Array-Member (U16)
+                    0x00, 0x02, // Array-Member (U16)
+                    0x00, 0x03, // Array-Member (U16)
                 ],
             );
 
@@ -4766,12 +5462,12 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 0],
-                "Serializer exausted at offset 0 for Object size 4",
+                "Serializer exhausted at offset 0 for Object size 4",
             );
             parse_fail(
                 &mut obj2,
                 &[0u8; 0],
-                "Parser exausted at offset 0 for Object size 4",
+                "Parser exhausted at offset 0 for Object size 4",
             );
 
             obj1.clear();
@@ -4780,7 +5476,7 @@ mod tests {
             assert!(!obj1.is_set(3));
         }
 
-        // missing mandatory
+        // missing required
         {
             let mut obj1 = SOMOptional::from(
                 SOMLengthField::U32,
@@ -4795,7 +5491,7 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 11],
-                "Uninitialized mandatory member 1 at offset 0",
+                "Uninitialized required member 1 at offset 0",
             );
 
             if let Some(SOMUnionMember::Bool(sub)) = obj1.get_mut(1) {
@@ -4807,7 +5503,7 @@ mod tests {
             serialize_fail(
                 &obj1,
                 &mut [0u8; 11],
-                "Uninitialized mandatory member 2 at offset 0",
+                "Uninitialized required member 2 at offset 0",
             );
 
             parse_fail(
@@ -4815,7 +5511,7 @@ mod tests {
                 &[
                     0x00, 0x00, 0x00, 0x00, // Length-Field (U32)
                 ],
-                "Uninitialized mandatory member 1 at offset 0",
+                "Uninitialized required member 1 at offset 0",
             );
 
             parse_fail(
@@ -4823,9 +5519,9 @@ mod tests {
                 &[
                     0x00, 0x00, 0x00, 0x03, // Length-Field (U32)
                     0x00, 0x01, // TLV-Tag (U16)
-                    0x01, // Bool-Memeber
+                    0x01, // Bool-Member
                 ],
-                "Uninitialized mandatory member 2 at offset 0",
+                "Uninitialized required member 2 at offset 0",
             );
         }
     }
