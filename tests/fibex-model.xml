@@ -24,379 +24,447 @@
         </service:API-VERSION>
         <service:METHODS>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives">
-            <ho:SHORT-NAME>echoPrimitives</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>1</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_ABool">
-                <ho:SHORT-NAME>ABool</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint8">
-                <ho:SHORT-NAME>AUint8</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>1</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint16">
-                <ho:SHORT-NAME>AUint16</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>2</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint32">
-                <ho:SHORT-NAME>AUint32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>3</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt8">
-                <ho:SHORT-NAME>AInt8</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>4</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt16">
-                <ho:SHORT-NAME>AInt16</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT16"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>5</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt32">
-                <ho:SHORT-NAME>AInt32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>6</service:POSITION>
-                </service:INPUT-PARAMETER>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AFloat32">
-                <ho:SHORT-NAME>AFloat32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_FLOAT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>7</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AFloat32">
-                <ho:SHORT-NAME>AFloat32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_FLOAT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt32">
-                <ho:SHORT-NAME>AInt32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>1</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt16">
-                <ho:SHORT-NAME>AInt16</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT16"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>2</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt8">
-                <ho:SHORT-NAME>AInt8</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>3</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint32">
-                <ho:SHORT-NAME>AUint32</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>4</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint16">
-                <ho:SHORT-NAME>AUint16</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>5</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint8">
-                <ho:SHORT-NAME>AUint8</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>6</service:POSITION>
-                </service:RETURN-PARAMETER>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_ABool">
-                <ho:SHORT-NAME>ABool</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>7</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoPrimitives</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>1</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_ABool">
+                    <ho:SHORT-NAME>ABool</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint8">
+                    <ho:SHORT-NAME>AUint8</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>1</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint16">
+                    <ho:SHORT-NAME>AUint16</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>2</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AUint32">
+                    <ho:SHORT-NAME>AUint32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>3</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt8">
+                    <ho:SHORT-NAME>AInt8</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>4</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt16">
+                    <ho:SHORT-NAME>AInt16</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>5</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AInt32">
+                    <ho:SHORT-NAME>AInt32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>6</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/in/Parameter_AFloat32">
+                    <ho:SHORT-NAME>AFloat32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_FLOAT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>7</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AFloat32">
+                    <ho:SHORT-NAME>AFloat32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_FLOAT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt32">
+                    <ho:SHORT-NAME>AInt32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>1</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt16">
+                    <ho:SHORT-NAME>AInt16</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>2</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AInt8">
+                    <ho:SHORT-NAME>AInt8</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_INT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>3</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint32">
+                    <ho:SHORT-NAME>AUint32</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>4</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint16">
+                    <ho:SHORT-NAME>AUint16</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>5</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_AUint8">
+                    <ho:SHORT-NAME>AUint8</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>6</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitives/ret/Parameter_ABool">
+                    <ho:SHORT-NAME>ABool</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>7</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testEnum">
-            <ho:SHORT-NAME>testEnum</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>2</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testEnum/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/EnumDatatype_AEnum"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testEnum/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/EnumDatatype_AEnum"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>testEnum</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>2</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testEnum/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/EnumDatatype_AEnum"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testEnum/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/EnumDatatype_AEnum"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testString">
-            <ho:SHORT-NAME>testString</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>8</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testString/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_STRINGUTF16DYNAMIC"/>
-                <fx:UTILIZATION>
-                    <fx:MAX-BIT-LENGTH>80</fx:MAX-BIT-LENGTH>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                    <fx:SERIALIZATION-ATTRIBUTES>
-                        <fx:LENGTH-FIELD-SIZE>16</fx:LENGTH-FIELD-SIZE>
-                    </fx:SERIALIZATION-ATTRIBUTES>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testString/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_STRINGUTF16DYNAMIC"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:MAX-BIT-LENGTH>80</fx:MAX-BIT-LENGTH>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
-                    <fx:SERIALIZATION-ATTRIBUTES>
-                        <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
-                        <fx:LENGTH-FIELD-SIZE>16</fx:LENGTH-FIELD-SIZE>
-                    </fx:SERIALIZATION-ATTRIBUTES>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>testString</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>8</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testString/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_STRINGUTF16DYNAMIC"/>
+                    <fx:UTILIZATION>
+                        <fx:MAX-BIT-LENGTH>80</fx:MAX-BIT-LENGTH>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:LENGTH-FIELD-SIZE>16</fx:LENGTH-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testString/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_STRINGUTF16DYNAMIC"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:MAX-BIT-LENGTH>80</fx:MAX-BIT-LENGTH>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
+                            <fx:LENGTH-FIELD-SIZE>16</fx:LENGTH-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray">
-            <ho:SHORT-NAME>echoArray</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>3</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>10</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>10</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoArray</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>3</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>10</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>10</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct">
-            <ho:SHORT-NAME>echoStruct</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>4</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoStruct</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>4</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoComplexArray">
-            <ho:SHORT-NAME>echoComplexArray</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>5</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoComplexArray/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoComplexArray/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoComplexArray</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>5</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoComplexArray/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoComplexArray/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AStruct"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>3</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>3</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitive">
-            <ho:SHORT-NAME>echoPrimitive</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>6</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitive/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitive/ret/Parameter_Output">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoPrimitive</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>6</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitive/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoPrimitive/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
             <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray">
-            <ho:SHORT-NAME>echoArray</ho:SHORT-NAME>
-            <service:METHOD-IDENTIFIER>7</service:METHOD-IDENTIFIER>
-            <service:INPUT-PARAMETERS>
-                <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/in/Parameter_Input">
-                <ho:SHORT-NAME>Input</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                    <fx:SERIALIZATION-ATTRIBUTES>
-                        <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
-                    </fx:SERIALIZATION-ATTRIBUTES>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:INPUT-PARAMETER>
-            </service:INPUT-PARAMETERS>
-            <service:RETURN-PARAMETERS>
-                <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/ret/Parameter_Input">
-                <ho:SHORT-NAME>Output</ho:SHORT-NAME>
-                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
-                <fx:ARRAY-DECLARATION>
-                    <fx:ARRAY-DIMENSION>
-                        <fx:DIMENSION>1</fx:DIMENSION>
-                        <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
-                        <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
-                    </fx:ARRAY-DIMENSION>
-                </fx:ARRAY-DECLARATION>
-                <fx:UTILIZATION>
-                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
-                    <fx:SERIALIZATION-ATTRIBUTES>
-                        <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
-                    </fx:SERIALIZATION-ATTRIBUTES>
-                </fx:UTILIZATION>
-                <service:POSITION>0</service:POSITION>
-                </service:RETURN-PARAMETER>
-            </service:RETURN-PARAMETERS>
+                <ho:SHORT-NAME>echoArray</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>7</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoArray/ret/Parameter_Input">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>1</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>10</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:ARRAY-LENGTH-FIELD-SIZE>16</fx:ARRAY-LENGTH-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
+            </service:METHOD>
+            <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testUnion">
+                <ho:SHORT-NAME>testUnion</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>9</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AUnion"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_echoStruct/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AUnion"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>2</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>2</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:TYPE-FIELD-SIZE>16</fx:TYPE-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
+            </service:METHOD>
+            <service:METHOD ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testOptional">
+                <ho:SHORT-NAME>testOptional</ho:SHORT-NAME>
+                <service:METHOD-IDENTIFIER>100</service:METHOD-IDENTIFIER>
+                <service:INPUT-PARAMETERS>
+                    <service:INPUT-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testOptional/in/Parameter_Input">
+                    <ho:SHORT-NAME>Input</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AOptional"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:INPUT-PARAMETER>
+                </service:INPUT-PARAMETERS>
+                <service:RETURN-PARAMETERS>
+                    <service:RETURN-PARAMETER ID="/SOMEIP/TEST/ServiceInterface_TestService/Method_testOptional/ret/Parameter_Output">
+                    <ho:SHORT-NAME>Output</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/SOMEIP/TEST/ComplexDatatype_AOptional"/>
+                    <fx:ARRAY-DECLARATION>
+                        <fx:ARRAY-DIMENSION>
+                            <fx:DIMENSION>1</fx:DIMENSION>
+                            <fx:MINIMUM-SIZE>2</fx:MINIMUM-SIZE>
+                            <fx:MAXIMUM-SIZE>2</fx:MAXIMUM-SIZE>
+                        </fx:ARRAY-DIMENSION>
+                    </fx:ARRAY-DECLARATION>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                        <fx:SERIALIZATION-ATTRIBUTES>
+                            <fx:LENGTH-FIELD-SIZE>16</fx:LENGTH-FIELD-SIZE>
+                        </fx:SERIALIZATION-ATTRIBUTES>
+                    </fx:UTILIZATION>
+                    <service:POSITION>0</service:POSITION>
+                    </service:RETURN-PARAMETER>
+                </service:RETURN-PARAMETERS>
             </service:METHOD>
         </service:METHODS>
         <service:EVENTS>
@@ -584,6 +652,56 @@
                 <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2">
                 <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
                 <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/SOMEIP/TEST/ComplexDatatype_AOptional">
+            <ho:SHORT-NAME>AOptional</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AOptional/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                <fx:DATA-ID>1</fx:DATA-ID>
+                <fx:MANDATORY>false</fx:MANDATORY>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AOptional/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                <fx:DATA-ID>2</fx:DATA-ID>
+                <fx:MANDATORY>true</fx:MANDATORY>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/SOMEIP/TEST/ComplexDatatype_AUnion">
+            <ho:SHORT-NAME>AUnion</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:COMPLEX-DATATYPE-CLASS>UNION</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AUnion/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AUnion/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
                 <fx:UTILIZATION>
                     <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
                 </fx:UTILIZATION>

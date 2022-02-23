@@ -95,10 +95,15 @@ impl FibexModel {
 
         for item in &mut self.types {
             let mut borrow = item.borrow_mut();
-            if let FibexDatatype::Struct(datatype) = &mut borrow.datatype {
-                for member in &mut datatype.members {
-                    Self::resolve_reference(&types, member, strict)?;
-                }
+
+            let mut empty = vec![];
+            for declaration in match &mut borrow.datatype {
+                FibexDatatype::Complex(FibexComplex::Struct(members)) => members,
+                FibexDatatype::Complex(FibexComplex::Optional(members)) => members,
+                FibexDatatype::Complex(FibexComplex::Union(members)) => members,
+                _ => &mut empty,
+            } {
+                Self::resolve_reference(&types, declaration, strict)?;
             }
         }
 
@@ -310,6 +315,26 @@ impl FibexTypeDeclaration {
 
         0
     }
+
+    pub fn get_data_id(&self) -> Option<usize> {
+        for attribute in &self.attributes {
+            if let FibexTypeAttribute::DataId(value) = attribute {
+                return Some(*value);
+            }
+        }
+
+        None
+    }
+
+    pub fn is_mandatory(&self) -> bool {
+        for attribute in &self.attributes {
+            if let FibexTypeAttribute::Mandatory(value) = attribute {
+                return *value;
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -323,6 +348,8 @@ pub enum FibexTypeAttribute {
     MinBitLength(usize),
     MaxBitLength(usize),
     Position(usize),
+    DataId(usize),
+    Mandatory(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -352,11 +379,9 @@ pub struct FibexTypeInstance {
 pub enum FibexDatatype {
     Unknown,
     Primitive(FibexPrimitive),
-    Struct(FibexStruct),
+    Complex(FibexComplex),
     Enum(FibexEnum),
     String(FibexString),
-    // Union,
-    // Optional,
 }
 
 impl PartialEq for FibexDatatype {
@@ -405,14 +430,16 @@ impl From<&str> for FibexPrimitive {
 }
 
 #[derive(Debug)]
-pub struct FibexStruct {
-    pub members: Vec<FibexTypeDeclaration>,
+pub enum FibexComplex {
+    Struct(Vec<FibexTypeDeclaration>),
+    Optional(Vec<FibexTypeDeclaration>),
+    Union(Vec<FibexTypeDeclaration>),
 }
 
 #[derive(Debug)]
 pub struct FibexEnum {
     pub primitive: FibexPrimitive,
-    pub variants: Vec<FibexEnumDeclaration>,
+    pub elements: Vec<FibexEnumDeclaration>,
 }
 
 #[derive(Debug)]
@@ -793,7 +820,7 @@ mod parser {
                         Rc::new(RefCell::new(FibexTypeInstance {
                             id: format!("{}/{}", id, parameter),
                             name: String::from(""),
-                            datatype: FibexDatatype::Struct(FibexStruct { members }),
+                            datatype: FibexDatatype::Complex(FibexComplex::Struct(members)),
                             coding_ref: None,
                         })),
                         Vec::new(),
@@ -825,8 +852,8 @@ mod parser {
                     field_type = Some(Rc::new(RefCell::new(FibexTypeInstance {
                         id: id.clone(),
                         name: String::from(""),
-                        datatype: FibexDatatype::Struct(FibexStruct {
-                            members: vec![FibexTypeDeclaration {
+                        datatype: FibexDatatype::Complex(FibexComplex::Struct(vec![
+                            FibexTypeDeclaration {
                                 id: id.clone(),
                                 name: first_to_lower(
                                     &ref_value(reader, field_name.as_ref())?.clone(),
@@ -834,8 +861,8 @@ mod parser {
                                 id_ref,
                                 type_ref: None,
                                 attributes: Vec::new(),
-                            }],
-                        }),
+                            },
+                        ])),
                         coding_ref: None,
                     })));
                 }
@@ -886,9 +913,10 @@ mod parser {
                 }
                 FibexEvent::FieldEnd => {
                     if let Some(item) = &mut field_type {
-                        if let FibexDatatype::Struct(struct_type) = &mut item.borrow_mut().datatype
+                        if let FibexDatatype::Complex(FibexComplex::Struct(members)) =
+                            &mut item.borrow_mut().datatype
                         {
-                            if let Some(member) = struct_type.members.get_mut(0) {
+                            if let Some(member) = members.get_mut(0) {
                                 member.attributes.append(&mut attributes);
                             }
                         }
@@ -1085,33 +1113,44 @@ mod parser {
         id: String,
     ) -> Result<FibexTypeInstance, FibexError> {
         let mut datatype_name: Option<String> = None;
-        let mut datatype_type = FibexDatatype::Unknown;
+        let mut datatype_class: Option<String> = None;
+        let mut members: Vec<FibexTypeDeclaration> = Vec::new();
 
         loop {
             match reader.read_fibex()? {
                 FibexEvent::ShortName(name) => {
                     datatype_name = Some(name);
                 }
-                FibexEvent::DatatypeClass(datatype_class) => {
-                    if datatype_class == "STRUCTURE" || datatype_class == "TYPEDEF" {
-                        datatype_type = FibexDatatype::Struct(FibexStruct {
-                            members: Vec::new(),
-                        });
-                    }
+                FibexEvent::DatatypeClass(name) => {
+                    datatype_class = Some(name);
                 }
                 FibexEvent::DatatypeMemberStart(id) => {
-                    if let FibexDatatype::Struct(datatype) = &mut datatype_type {
-                        datatype.members.push(parse_datatype_member(reader, id)?);
-                    }
+                    members.push(parse_datatype_member(reader, id)?);
                 }
                 FibexEvent::DatatypeEnd => {
-                    if let FibexDatatype::Struct(datatype) = &mut datatype_type {
-                        datatype.members.sort_by_key(|m| m.get_position());
-                    }
+                    members.sort_by_key(|m| m.get_position());
+
                     return Ok(FibexTypeInstance {
                         id,
                         name: first_to_upper(&get_value(reader, datatype_name)?),
-                        datatype: datatype_type,
+                        datatype: match datatype_class.as_deref() {
+                            Some("STRUCTURE") | Some("TYPEDEF") => {
+                                let mut is_optional = !members.is_empty();
+                                for member in &members {
+                                    if member.get_data_id().is_none() {
+                                        is_optional = false;
+                                        break;
+                                    }
+                                }
+                                if is_optional {
+                                    FibexDatatype::Complex(FibexComplex::Optional(members))
+                                } else {
+                                    FibexDatatype::Complex(FibexComplex::Struct(members))
+                                }
+                            }
+                            Some("UNION") => FibexDatatype::Complex(FibexComplex::Union(members)),
+                            _ => FibexDatatype::Unknown,
+                        },
                         coding_ref: None,
                     });
                 }
@@ -1148,6 +1187,12 @@ mod parser {
                 FibexEvent::Position(value) => {
                     attributes.push(FibexTypeAttribute::Position(parse_number(reader, &value)?));
                 }
+                FibexEvent::DataId(value) => {
+                    attributes.push(FibexTypeAttribute::DataId(parse_number(reader, &value)?));
+                }
+                FibexEvent::Mandatory(value) => {
+                    attributes.push(FibexTypeAttribute::Mandatory(parse_bool(reader, &value)?));
+                }
                 FibexEvent::DatatypeMemberEnd => {
                     return Ok(FibexTypeDeclaration {
                         id,
@@ -1171,7 +1216,7 @@ mod parser {
     ) -> Result<FibexTypeInstance, FibexError> {
         let mut enum_name: Option<String> = None;
         let mut enum_coding: Option<String> = None;
-        let mut variants = Vec::new();
+        let mut elements = Vec::new();
 
         loop {
             match reader.read_fibex()? {
@@ -1187,13 +1232,13 @@ mod parser {
                         name: first_to_upper(&get_value(reader, enum_name)?),
                         datatype: FibexDatatype::Enum(FibexEnum {
                             primitive: FibexPrimitive::Unknown,
-                            variants,
+                            elements,
                         }),
                         coding_ref: Some(get_value(reader, enum_coding)?),
                     });
                 }
                 FibexEvent::EnumStart => {
-                    variants.push(parse_enum_element(reader, &id)?);
+                    elements.push(parse_enum_element(reader, &id)?);
                 }
                 FibexEvent::Eof => {
                     return Err(unexpected_eof(&id));
@@ -1447,6 +1492,8 @@ mod xml {
     const B_DATATYPE_REF: &[u8] = b"DATATYPE-REF";
     const B_CODING_REF: &[u8] = b"CODING-REF";
     const B_POSITION: &[u8] = b"POSITION";
+    const B_DATA_ID: &[u8] = b"DATA-ID";
+    const B_MANDATORY: &[u8] = b"MANDATORY";
 
     const B_ENUM: &[u8] = b"ENUM-ELEMENT";
     const B_ENUM_NAME: &[u8] = b"SYNONYM";
@@ -1512,6 +1559,8 @@ mod xml {
         DatatypeRef(String),
         CodingRef(String),
         Position(String),
+        DataId(String),
+        Mandatory(String),
         EnumStart,
         EnumEnd,
         EnumName(String),
@@ -1786,6 +1835,20 @@ mod xml {
                         }
                         B_POSITION => {
                             return Ok(FibexEvent::Position(get_text(
+                                &mut self.reader,
+                                &mut self.buffer2,
+                                event,
+                            )?));
+                        }
+                        B_DATA_ID => {
+                            return Ok(FibexEvent::DataId(get_text(
+                                &mut self.reader,
+                                &mut self.buffer2,
+                                event,
+                            )?));
+                        }
+                        B_MANDATORY => {
+                            return Ok(FibexEvent::Mandatory(get_text(
                                 &mut self.reader,
                                 &mut self.buffer2,
                                 event,
@@ -2099,22 +2162,20 @@ mod tests {
             );
             assert!(request_type.name.is_empty());
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &request_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
+            assert_eq!(1, members.len());
 
-            assert_eq!(1, struct_type.members.len());
-            let member = struct_type.members.get(0).unwrap();
-
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
                 "/SOMEIP/TEST/ServiceInterface_TestService/Method_TestMethod/in/Parameter_Input"
             );
             assert_eq!(member.name, "input");
             assert_eq!(member.id_ref, "/CommonDatatype_UINT8");
-
             assert!(member.is_high_low_byte_order());
             assert!(!member.is_array());
 
@@ -2142,15 +2203,14 @@ mod tests {
             );
             assert!(response_type.name.is_empty());
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &response_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
+            assert_eq!(1, members.len());
 
-            assert_eq!(1, struct_type.members.len());
-            let member = struct_type.members.get(0).unwrap();
-
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
                 "/SOMEIP/TEST/ServiceInterface_TestService/Method_TestMethod/ret/Parameter_Output"
@@ -2228,25 +2288,23 @@ mod tests {
             let request = method.request.as_ref().unwrap();
             let request_type = request.type_ref.as_ref().unwrap().borrow();
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &request_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
+            assert_eq!(1, members.len());
 
-            assert_eq!(1, struct_type.members.len());
-            let member = struct_type.members.get(0).unwrap();
-
+            let member = members.get(0).unwrap();
             assert!(member.is_high_low_byte_order());
             assert!(member.is_array());
-
+            assert_eq!(1, member.get_array_length_field_size());
             assert_eq!(1, member.num_array_dimensions());
+
             let array_dimension = member.get_array_dimension(0).unwrap();
             assert_eq!(1, array_dimension.index);
             assert_eq!(3, array_dimension.min);
             assert_eq!(5, array_dimension.max);
-
-            assert_eq!(1, member.get_array_length_field_size());
 
             let member_type = member.type_ref.as_ref().unwrap().borrow();
             assert_if!(
@@ -2333,15 +2391,14 @@ mod tests {
             );
             assert!(request_type.name.is_empty());
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &request_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
+            assert_eq!(2, members.len());
 
-            assert_eq!(2, struct_type.members.len());
-
-            let member = struct_type.members.get(0).unwrap();
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
                 "/SOMEIP/TEST/ServiceInterface_TestService/Method_TestEvent/in/Parameter_Value1"
@@ -2358,7 +2415,7 @@ mod tests {
                 FibexDatatype::Primitive(FibexPrimitive::Uint8)
             );
 
-            let member = struct_type.members.get(1).unwrap();
+            let member = members.get(1).unwrap();
             assert_eq!(
                 member.id,
                 "/SOMEIP/TEST/ServiceInterface_TestService/Method_TestEvent/in/Parameter_Value2"
@@ -2510,15 +2567,14 @@ mod tests {
             );
             assert!(field_type.name.is_empty());
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &field_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
+            assert_eq!(1, members.len());
 
-            assert_eq!(1, struct_type.members.len());
-            let member = struct_type.members.get(0).unwrap();
-
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
                 "/SOMEIP/TEST/ServiceInterface_TestService/Field_TestField"
@@ -2624,23 +2680,24 @@ mod tests {
             assert!(method.response.is_none());
         }
 
-        fn assert_test_field_array(payload: &FibexTypeInstance) {
-            let struct_type =
-                match_if!(&payload.datatype, FibexDatatype::Struct(datatype), datatype);
+        fn assert_test_field_array(field_type: &FibexTypeInstance) {
+            let members = match_if!(
+                &field_type.datatype,
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
+            );
+            assert_eq!(1, members.len());
 
-            assert_eq!(1, struct_type.members.len());
-            let member = struct_type.members.get(0).unwrap();
-
+            let member = members.get(0).unwrap();
             assert!(!member.is_high_low_byte_order());
             assert!(member.is_array());
-
+            assert_eq!(4, member.get_array_length_field_size());
             assert_eq!(1, member.num_array_dimensions());
+
             let array_dimension = member.get_array_dimension(0).unwrap();
             assert_eq!(1, array_dimension.index);
             assert_eq!(0, array_dimension.min);
             assert_eq!(5, array_dimension.max);
-
-            assert_eq!(4, member.get_array_length_field_size());
 
             let member_type = member.type_ref.as_ref().unwrap().borrow();
             assert_if!(
@@ -2758,11 +2815,11 @@ mod tests {
             <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT16">
                 <ho:SHORT-NAME>UINT16</ho:SHORT-NAME>
             </fx:DATATYPE>
-            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_Struct">
-                <ho:SHORT-NAME>Struct</ho:SHORT-NAME>
+            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_AStruct">
+                <ho:SHORT-NAME>AStruct</ho:SHORT-NAME>
                 <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
                 <fx:MEMBERS>
-                    <fx:MEMBER ID="/ComplexDatatype_Struct/ComplexDatatypeMember_Member2">
+                    <fx:MEMBER ID="/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2">
                     <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
                     <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
                     <fx:UTILIZATION>
@@ -2770,7 +2827,7 @@ mod tests {
                     </fx:UTILIZATION>
                     <fx:POSITION>1</fx:POSITION>
                     </fx:MEMBER>
-                    <fx:MEMBER ID="/ComplexDatatype_Struct/ComplexDatatypeMember_Member1">
+                    <fx:MEMBER ID="/ComplexDatatype_AStruct/ComplexDatatypeMember_Member1">
                     <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
                     <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
                     <fx:UTILIZATION>
@@ -2802,26 +2859,25 @@ mod tests {
         );
 
         let complex_type = model.types.get(2).unwrap().borrow();
-        assert_eq!(complex_type.id, "/ComplexDatatype_Struct");
-        assert_eq!(complex_type.name, "Struct");
+        assert_eq!(complex_type.id, "/ComplexDatatype_AStruct");
+        assert_eq!(complex_type.name, "AStruct");
 
-        let struct_type = match_if!(
+        let members = match_if!(
             &complex_type.datatype,
-            FibexDatatype::Struct(datatype),
-            datatype
+            FibexDatatype::Complex(FibexComplex::Struct(members)),
+            members
         );
-        assert_eq!(2, struct_type.members.len());
+        assert_eq!(2, members.len());
 
         // member 1
         {
-            let member = struct_type.members.get(0).unwrap();
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
-                "/ComplexDatatype_Struct/ComplexDatatypeMember_Member1"
+                "/ComplexDatatype_AStruct/ComplexDatatypeMember_Member1"
             );
             assert_eq!(member.name, "member1");
             assert_eq!(member.id_ref, "/CommonDatatype_UINT8");
-
             assert!(member.is_high_low_byte_order());
             assert!(!member.is_array());
 
@@ -2835,10 +2891,10 @@ mod tests {
 
         // member 2
         {
-            let member = struct_type.members.get(1).unwrap();
+            let member = members.get(1).unwrap();
             assert_eq!(
                 member.id,
-                "/ComplexDatatype_Struct/ComplexDatatypeMember_Member2"
+                "/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2"
             );
             assert_eq!(member.name, "member2");
             assert_eq!(member.id_ref, "/CommonDatatype_UINT16");
@@ -2868,16 +2924,16 @@ mod tests {
             <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_INT32">
                 <ho:SHORT-NAME>INT32</ho:SHORT-NAME>
             </fx:DATATYPE>
-            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_Struct">
-                <ho:SHORT-NAME>Struct</ho:SHORT-NAME>
+            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_AStruct">
+                <ho:SHORT-NAME>AStruct</ho:SHORT-NAME>
                 <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
                 <fx:MEMBERS>
-                    <fx:MEMBER ID="/ComplexDatatype_Struct/ComplexDatatypeMember_Member1">
+                    <fx:MEMBER ID="/ComplexDatatype_AStruct/ComplexDatatypeMember_Member1">
                     <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
                     <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
                     <fx:POSITION>0</fx:POSITION>
                     </fx:MEMBER>
-                    <fx:MEMBER ID="/ComplexDatatype_Struct/ComplexDatatypeMember_Member2">
+                    <fx:MEMBER ID="/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2">
                     <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
                     <fx:DATATYPE-REF ID-REF="/ComplexDatatype_SubStruct"/>
                     <fx:POSITION>1</fx:POSITION>
@@ -2946,22 +3002,22 @@ mod tests {
         );
 
         let complex_type = model.types.get(3).unwrap().borrow();
-        assert_eq!(complex_type.id, "/ComplexDatatype_Struct");
-        assert_eq!(complex_type.name, "Struct");
+        assert_eq!(complex_type.id, "/ComplexDatatype_AStruct");
+        assert_eq!(complex_type.name, "AStruct");
 
-        let struct_type = match_if!(
+        let members = match_if!(
             &complex_type.datatype,
-            FibexDatatype::Struct(datatype),
-            datatype
+            FibexDatatype::Complex(FibexComplex::Struct(members)),
+            members
         );
-        assert_eq!(2, struct_type.members.len());
+        assert_eq!(2, members.len());
 
         // member 1
         {
-            let member = struct_type.members.get(0).unwrap();
+            let member = members.get(0).unwrap();
             assert_eq!(
                 member.id,
-                "/ComplexDatatype_Struct/ComplexDatatypeMember_Member1"
+                "/ComplexDatatype_AStruct/ComplexDatatypeMember_Member1"
             );
             assert_eq!(member.name, "member1");
             assert_eq!(member.id_ref, "/CommonDatatype_BOOL");
@@ -2977,33 +3033,32 @@ mod tests {
 
         // member 2
         {
-            let member = struct_type.members.get(1).unwrap();
+            let member = members.get(1).unwrap();
             assert_eq!(
                 member.id,
-                "/ComplexDatatype_Struct/ComplexDatatypeMember_Member2"
+                "/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2"
             );
             assert_eq!(member.id_ref, "/ComplexDatatype_SubStruct");
             assert!(!member.is_array());
 
             let member_type = member.type_ref.as_ref().unwrap().borrow();
 
-            let struct_type = match_if!(
+            let members = match_if!(
                 &member_type.datatype,
-                FibexDatatype::Struct(datatype),
-                datatype
+                FibexDatatype::Complex(FibexComplex::Struct(members)),
+                members
             );
-            assert_eq!(2, struct_type.members.len());
+            assert_eq!(2, members.len());
 
             // sub member 1
             {
-                let member = struct_type.members.get(0).unwrap();
+                let member = members.get(0).unwrap();
                 assert_eq!(
                     member.id,
                     "/ComplexDatatype_SubStruct/ComplexDatatypeMember_Member1"
                 );
                 assert_eq!(member.name, "member1");
                 assert_eq!(member.id_ref, "/CommonDatatype_INT16");
-
                 assert!(member.is_high_low_byte_order());
                 assert!(!member.is_array());
 
@@ -3017,7 +3072,7 @@ mod tests {
 
             // sub member 2
             {
-                let member = struct_type.members.get(1).unwrap();
+                let member = members.get(1).unwrap();
                 assert_eq!(
                     member.id,
                     "/ComplexDatatype_SubStruct/ComplexDatatypeMember_Member2"
@@ -3026,8 +3081,8 @@ mod tests {
                 assert_eq!(member.id_ref, "/CommonDatatype_INT32");
                 assert!(!member.is_high_low_byte_order());
                 assert!(member.is_array());
-
                 assert_eq!(2, member.num_array_dimensions());
+
                 let array_dimension = member.get_array_dimension(0).unwrap();
                 assert_eq!(1, array_dimension.index);
                 assert_eq!(0, array_dimension.min);
@@ -3045,6 +3100,226 @@ mod tests {
                     FibexDatatype::Primitive(FibexPrimitive::Int32)
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_parse_optional() {
+        use stringreader::StringReader;
+
+        let xml = r#"
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT8">
+                <ho:SHORT-NAME>UINT8</ho:SHORT-NAME>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT16">
+                <ho:SHORT-NAME>UINT16</ho:SHORT-NAME>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_AOptional">
+                <ho:SHORT-NAME>AOptional</ho:SHORT-NAME>
+                <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+                <fx:MEMBERS>
+                    <fx:MEMBER ID="/ComplexDatatype_AOptional/ComplexDatatypeMember_Member2">
+                    <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>1</fx:POSITION>
+                    <fx:DATA-ID>2</fx:DATA-ID>
+                    <fx:MANDATORY>true</fx:MANDATORY>
+                    </fx:MEMBER>
+                    <fx:MEMBER ID="/ComplexDatatype_AOptional/ComplexDatatypeMember_Member1">
+                    <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>0</fx:POSITION>
+                    <fx:DATA-ID>1</fx:DATA-ID>
+                    <fx:MANDATORY>false</fx:MANDATORY>
+                    </fx:MEMBER>
+                </fx:MEMBERS>
+            </fx:DATATYPE>
+        "#;
+
+        let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
+        let model = FibexParser::parse(reader).expect("parse failed");
+
+        assert_eq!(3, model.types.len());
+
+        let common_type = model.types.get(0).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_UINT8");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint8)
+        );
+
+        let common_type = model.types.get(1).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_UINT16");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint16)
+        );
+
+        let complex_type = model.types.get(2).unwrap().borrow();
+        assert_eq!(complex_type.id, "/ComplexDatatype_AOptional");
+        assert_eq!(complex_type.name, "AOptional");
+
+        let members = match_if!(
+            &complex_type.datatype,
+            FibexDatatype::Complex(FibexComplex::Optional(members)),
+            members
+        );
+        assert_eq!(2, members.len());
+
+        // member 1
+        {
+            let member = members.get(0).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_AOptional/ComplexDatatypeMember_Member1"
+            );
+            assert_eq!(member.name, "member1");
+            assert_eq!(member.id_ref, "/CommonDatatype_UINT8");
+            assert!(member.is_high_low_byte_order());
+            assert!(!member.is_array());
+            assert_eq!(1, member.get_data_id().unwrap());
+            assert!(!member.is_mandatory());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_UINT8");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint8)
+            );
+        }
+
+        // member 2
+        {
+            let member = members.get(1).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_AOptional/ComplexDatatypeMember_Member2"
+            );
+            assert_eq!(member.name, "member2");
+            assert_eq!(member.id_ref, "/CommonDatatype_UINT16");
+            assert!(!member.is_high_low_byte_order());
+            assert!(!member.is_array());
+            assert_eq!(2, member.get_data_id().unwrap());
+            assert!(member.is_mandatory());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_UINT16");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint16)
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_union() {
+        use stringreader::StringReader;
+
+        let xml = r#"
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT8">
+                <ho:SHORT-NAME>UINT8</ho:SHORT-NAME>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT16">
+                <ho:SHORT-NAME>UINT16</ho:SHORT-NAME>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_AUnion">
+                <ho:SHORT-NAME>AUnion</ho:SHORT-NAME>
+                <fx:COMPLEX-DATATYPE-CLASS>UNION</fx:COMPLEX-DATATYPE-CLASS>
+                <fx:MEMBERS>
+                    <fx:MEMBER ID="/ComplexDatatype_AUnion/ComplexDatatypeMember_Member1">
+                    <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>0</fx:POSITION>
+                    </fx:MEMBER>
+                    <fx:MEMBER ID="/ComplexDatatype_AUnion/ComplexDatatypeMember_Member2">
+                    <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>1</fx:POSITION>
+                    </fx:MEMBER>
+                </fx:MEMBERS>
+            </fx:DATATYPE>
+        "#;
+
+        let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
+        let model = FibexParser::parse(reader).expect("parse failed");
+
+        assert_eq!(3, model.types.len());
+
+        let common_type = model.types.get(0).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_UINT8");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint8)
+        );
+
+        let common_type = model.types.get(1).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_UINT16");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint16)
+        );
+
+        let complex_type = model.types.get(2).unwrap().borrow();
+        assert_eq!(complex_type.id, "/ComplexDatatype_AUnion");
+        assert_eq!(complex_type.name, "AUnion");
+
+        let members = match_if!(
+            &complex_type.datatype,
+            FibexDatatype::Complex(FibexComplex::Union(members)),
+            members
+        );
+        assert_eq!(2, members.len());
+
+        // member 1
+        {
+            let member = members.get(0).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_AUnion/ComplexDatatypeMember_Member1"
+            );
+            assert_eq!(member.name, "member1");
+            assert_eq!(member.id_ref, "/CommonDatatype_UINT8");
+            assert!(member.is_high_low_byte_order());
+            assert!(!member.is_array());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_UINT8");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint8)
+            );
+        }
+
+        // member 2
+        {
+            let member = members.get(1).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_AUnion/ComplexDatatypeMember_Member2"
+            );
+            assert_eq!(member.name, "member2");
+            assert_eq!(member.id_ref, "/CommonDatatype_UINT16");
+            assert!(!member.is_high_low_byte_order());
+            assert!(!member.is_array());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_UINT16");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint16)
+            );
         }
     }
 
@@ -3096,7 +3371,7 @@ mod tests {
             FibexDatatype::Enum(datatype),
             datatype
         );
-        assert_eq!(3, enum_type.variants.len());
+        assert_eq!(3, enum_type.elements.len());
 
         // primitive
         {
@@ -3105,19 +3380,19 @@ mod tests {
             assert_if!(&primitive, FibexPrimitive::Uint16);
         }
 
-        // variants
+        // elements
         {
-            let enum_variant = enum_type.variants.get(0).unwrap();
-            assert_eq!(enum_variant.name, "A");
-            assert_eq!(enum_variant.value, "1");
+            let element = enum_type.elements.get(0).unwrap();
+            assert_eq!(element.name, "A");
+            assert_eq!(element.value, "1");
 
-            let enum_variant = enum_type.variants.get(1).unwrap();
-            assert_eq!(enum_variant.name, "B");
-            assert_eq!(enum_variant.value, "2");
+            let element = enum_type.elements.get(1).unwrap();
+            assert_eq!(element.name, "B");
+            assert_eq!(element.value, "2");
 
-            let enum_variant = enum_type.variants.get(2).unwrap();
-            assert_eq!(enum_variant.name, "C");
-            assert_eq!(enum_variant.value, "3");
+            let element = enum_type.elements.get(2).unwrap();
+            assert_eq!(element.name, "C");
+            assert_eq!(element.value, "3");
         }
     }
 
@@ -3198,16 +3473,16 @@ mod tests {
 
         let complex_type = model.types.get(0).unwrap().borrow();
 
-        let struct_type = match_if!(
+        let members = match_if!(
             &complex_type.datatype,
-            FibexDatatype::Struct(datatype),
-            datatype
+            FibexDatatype::Complex(FibexComplex::Struct(members)),
+            members
         );
-        assert_eq!(2, struct_type.members.len());
+        assert_eq!(2, members.len());
 
         // member 1
         {
-            let member = struct_type.members.get(0).unwrap();
+            let member = members.get(0).unwrap();
             assert_eq!(member.id_ref, "/CommonDatatype_STRINGUTF8FIXED");
 
             assert!(member.is_high_low_byte_order());
@@ -3230,7 +3505,7 @@ mod tests {
 
         // member 2
         {
-            let member = struct_type.members.get(1).unwrap();
+            let member = members.get(1).unwrap();
             assert_eq!(member.id_ref, "/CommonDatatype_STRINGUTF16DYNAMIC");
 
             assert!(!member.is_high_low_byte_order());
@@ -3262,12 +3537,14 @@ mod tests {
         let model = FibexParser::try_parse(reader).expect("parse failed");
 
         assert_eq!(1, model.services.len());
-        assert_eq!(17, model.services.get(0).unwrap().methods.len());
-        assert_eq!(33, model.types.len());
+        assert_eq!(19, model.services.get(0).unwrap().methods.len());
+        assert_eq!(39, model.types.len());
         assert_eq!(3, model.codings.len());
 
         let mut num_primitives = 0;
         let mut num_structs = 0;
+        let mut num_optionals = 0;
+        let mut num_unions = 0;
         let mut num_enums = 0;
         let mut num_strings = 0;
 
@@ -3275,8 +3552,14 @@ mod tests {
             if let FibexDatatype::Primitive(_) = item.borrow().datatype {
                 num_primitives += 1;
             }
-            if let FibexDatatype::Struct(_) = item.borrow().datatype {
+            if let FibexDatatype::Complex(FibexComplex::Struct(_)) = item.borrow().datatype {
                 num_structs += 1;
+            }
+            if let FibexDatatype::Complex(FibexComplex::Optional(_)) = item.borrow().datatype {
+                num_optionals += 1;
+            }
+            if let FibexDatatype::Complex(FibexComplex::Union(_)) = item.borrow().datatype {
+                num_unions += 1;
             }
             if let FibexDatatype::Enum(_) = item.borrow().datatype {
                 num_enums += 1;
@@ -3287,7 +3570,9 @@ mod tests {
         }
 
         assert_eq!(8, num_primitives);
-        assert_eq!(22, num_structs);
+        assert_eq!(26, num_structs);
+        assert_eq!(1, num_optionals);
+        assert_eq!(1, num_unions);
         assert_eq!(1, num_enums);
         assert_eq!(2, num_strings);
     }

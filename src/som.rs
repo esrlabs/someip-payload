@@ -1477,16 +1477,16 @@ pub(crate) mod unions {
     pub struct SOMUnionType<T: SOMType + Any> {
         meta: Option<SOMTypeMeta>,
         typefield: SOMTypeField,
-        variants: Vec<T>,
+        members: Vec<T>,
         index: usize,
     }
 
     impl<T: SOMType + Any> SOMUnionType<T> {
-        pub fn from(typefield: SOMTypeField, variants: Vec<T>) -> Self {
+        pub fn from(typefield: SOMTypeField, members: Vec<T>) -> Self {
             SOMUnionType {
                 meta: None,
                 typefield,
-                variants,
+                members,
                 index: INVALID_TYPE,
             }
         }
@@ -1501,7 +1501,7 @@ pub(crate) mod unions {
         }
 
         pub fn len(&self) -> usize {
-            self.variants.len()
+            self.members.len()
         }
 
         pub fn has_value(&self) -> bool {
@@ -1519,7 +1519,7 @@ pub(crate) mod unions {
 
         pub fn get(&self) -> Option<&T> {
             if self.has_value() {
-                self.variants.get(self.index - 1)
+                self.members.get(self.index - 1)
             } else {
                 None
             }
@@ -1527,7 +1527,7 @@ pub(crate) mod unions {
 
         pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
             if self.set(index) {
-                self.variants.get_mut(index - 1)
+                self.members.get_mut(index - 1)
             } else {
                 None
             }
@@ -1618,15 +1618,15 @@ pub(crate) mod enums {
     #[derive(Debug, Clone)]
     pub struct SOMEnumType<T> {
         meta: Option<SOMTypeMeta>,
-        variants: Vec<SOMEnumTypeItem<T>>,
+        elements: Vec<SOMEnumTypeItem<T>>,
         index: usize,
     }
 
     impl<T: Copy + PartialEq> SOMEnumType<T> {
-        pub fn from(variants: Vec<SOMEnumTypeItem<T>>) -> Self {
+        pub fn from(elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumType {
                 meta: None,
-                variants,
+                elements,
                 index: 0,
             }
         }
@@ -1641,7 +1641,7 @@ pub(crate) mod enums {
         }
 
         pub fn len(&self) -> usize {
-            self.variants.len()
+            self.elements.len()
         }
 
         pub fn has_value(&self) -> bool {
@@ -1649,8 +1649,8 @@ pub(crate) mod enums {
         }
 
         pub fn get(&self) -> Option<T> {
-            if let Some(variant) = self.value() {
-                return Some(variant.value);
+            if let Some(element) = self.value() {
+                return Some(element.value);
             }
 
             None
@@ -1658,8 +1658,8 @@ pub(crate) mod enums {
 
         pub(crate) fn value(&self) -> Option<&SOMEnumTypeItem<T>> {
             if self.has_value() {
-                if let Some(variant) = self.variants.get(self.index - 1) {
-                    return Some(variant);
+                if let Some(element) = self.elements.get(self.index - 1) {
+                    return Some(element);
                 }
             }
 
@@ -1668,9 +1668,9 @@ pub(crate) mod enums {
 
         pub fn set(&mut self, key: String) -> bool {
             let mut index: usize = 0;
-            for variant in &self.variants {
+            for element in &self.elements {
                 index += 1;
-                if variant.key == key {
+                if element.key == key {
                     self.index = index;
                     return true;
                 }
@@ -1685,9 +1685,9 @@ pub(crate) mod enums {
 
         fn apply(&mut self, value: T) -> bool {
             let mut index: usize = 0;
-            for variant in &self.variants {
+            for element in &self.elements {
                 index += 1;
-                if variant.value == value {
+                if element.value == value {
                     self.index = index;
                     return true;
                 }
@@ -1704,9 +1704,9 @@ pub(crate) mod enums {
     }
 
     impl<T: Copy + PartialEq> SOMEnumTypeWithEndian<T> {
-        pub fn from(endian: SOMEndian, variants: Vec<SOMEnumTypeItem<T>>) -> Self {
+        pub fn from(endian: SOMEndian, elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumTypeWithEndian {
-                enumeration: SOMEnumType::from(variants),
+                enumeration: SOMEnumType::from(elements),
                 endian,
             }
         }
@@ -2659,7 +2659,7 @@ pub(crate) mod optionals {
 pub type SOMOptionalMember = wrapper::SOMTypeWrapper;
 pub type SOMOptional = optionals::SOMOptionalType<SOMOptionalMember>;
 
-mod wrapper {
+pub(crate) mod wrapper {
     use super::*;
     use std::fmt::{Display, Formatter, Result as FmtResult};
 

@@ -35,8 +35,24 @@ mod types {
                     let endian = get_type_endian(type_decl.is_high_low_byte_order());
                     return get_primitive_type(name, description, datatype, endian);
                 }
-                FibexDatatype::Struct(datatype) => {
-                    return get_struct_type(name, description, datatype);
+                FibexDatatype::Complex(FibexComplex::Struct(members)) => {
+                    return get_struct_type(name, description, members);
+                }
+                FibexDatatype::Complex(FibexComplex::Optional(members)) => {
+                    return get_optional_type(
+                        name,
+                        description,
+                        members,
+                        type_decl.get_length_field_size(),
+                    );
+                }
+                FibexDatatype::Complex(FibexComplex::Union(members)) => {
+                    return get_union_type(
+                        name,
+                        description,
+                        members,
+                        type_decl.get_type_length_field_size(),
+                    );
                 }
                 FibexDatatype::Enum(datatype) => {
                     let endian = get_type_endian(type_decl.is_high_low_byte_order());
@@ -105,7 +121,7 @@ mod types {
                                 );
                             }
                         }
-                        FibexDatatype::Struct(_) => {
+                        FibexDatatype::Complex(_) => {
                             if let Some(item) = (*element_type).as_any().downcast_ref::<SOMStruct>()
                             {
                                 return Some(Box::new(
@@ -117,7 +133,31 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            };
+                            } else if let Some(item) =
+                                (*element_type).as_any().downcast_ref::<SOMOptional>()
+                            {
+                                return Some(Box::new(
+                                    SOMArray::dynamic(
+                                        lengthfield,
+                                        SOMArrayMember::Optional(item.clone()),
+                                        dimension.min,
+                                        dimension.max,
+                                    )
+                                    .with_meta(SOMTypeMeta::from(name, description)),
+                                ));
+                            } else if let Some(item) =
+                                (*element_type).as_any().downcast_ref::<SOMUnion>()
+                            {
+                                return Some(Box::new(
+                                    SOMArray::dynamic(
+                                        lengthfield,
+                                        SOMArrayMember::Union(item.clone()),
+                                        dimension.min,
+                                        dimension.max,
+                                    )
+                                    .with_meta(SOMTypeMeta::from(name, description)),
+                                ));
+                            }
                         }
                         FibexDatatype::Enum(_) => {
                             if let Some(item) = (*element_type).as_any().downcast_ref::<SOMu8Enum>()
@@ -131,8 +171,7 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            }
-                            if let Some(item) =
+                            } else if let Some(item) =
                                 (*element_type).as_any().downcast_ref::<SOMu16Enum>()
                             {
                                 return Some(Box::new(
@@ -144,8 +183,7 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            };
-                            if let Some(item) =
+                            } else if let Some(item) =
                                 (*element_type).as_any().downcast_ref::<SOMu32Enum>()
                             {
                                 return Some(Box::new(
@@ -157,8 +195,7 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            };
-                            if let Some(item) =
+                            } else if let Some(item) =
                                 (*element_type).as_any().downcast_ref::<SOMu64Enum>()
                             {
                                 return Some(Box::new(
@@ -170,7 +207,7 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            };
+                            }
                         }
                         FibexDatatype::String(_) => {
                             if let Some(item) = (*element_type).as_any().downcast_ref::<SOMString>()
@@ -184,7 +221,7 @@ mod types {
                                     )
                                     .with_meta(SOMTypeMeta::from(name, description)),
                                 ));
-                            };
+                            }
                         }
                         _ => {
                             warn!("nyi: {:?}", &type_def.datatype);
@@ -217,7 +254,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint8 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu8Array>() {
@@ -230,7 +267,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int8 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi8Array>() {
@@ -243,7 +280,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint16 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu16Array>() {
@@ -256,7 +293,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int16 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi16Array>() {
@@ -269,7 +306,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint24 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu24Array>() {
@@ -282,7 +319,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int24 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi24Array>() {
@@ -295,7 +332,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu32Array>() {
@@ -308,7 +345,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi32Array>() {
@@ -321,7 +358,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu64Array>() {
@@ -334,7 +371,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi64Array>() {
@@ -347,7 +384,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Float32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMf32Array>() {
@@ -360,7 +397,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Float64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMf64Array>() {
@@ -373,7 +410,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Unknown => {
                 return None;
@@ -403,7 +440,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint8 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu8>() {
@@ -416,7 +453,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int8 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi8>() {
@@ -429,7 +466,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint16 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu16>() {
@@ -442,7 +479,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int16 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi16>() {
@@ -455,7 +492,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint24 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu24>() {
@@ -468,7 +505,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int24 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi24>() {
@@ -481,7 +518,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu32>() {
@@ -494,7 +531,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi32>() {
@@ -507,7 +544,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Uint64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMu64>() {
@@ -520,7 +557,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Int64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMi64>() {
@@ -533,7 +570,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Float32 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMf32>() {
@@ -546,7 +583,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Float64 => {
                 if let Some(item) = (*element).as_any().downcast_ref::<SOMf64>() {
@@ -559,7 +596,7 @@ mod types {
                         )
                         .with_meta(SOMTypeMeta::from(name, description)),
                     ));
-                };
+                }
             }
             FibexPrimitive::Unknown => {
                 return None;
@@ -622,52 +659,107 @@ mod types {
     fn get_struct_type(
         name: String,
         description: String,
-        datatype: &FibexStruct,
+        type_decls: &[FibexTypeDeclaration],
     ) -> Option<Box<dyn SOMType>> {
-        let mut elements = Vec::new();
+        Some(Box::new(
+            SOMStruct::from(get_complex_type_items(type_decls))
+                .with_meta(SOMTypeMeta::from(name, description)),
+        ))
+    }
 
-        for member in &datatype.members {
-            if let Some(type_ref) = &member.type_ref {
+    fn get_optional_type(
+        name: String,
+        description: String,
+        type_decls: &[FibexTypeDeclaration],
+        lengthfield_size: usize,
+    ) -> Option<Box<dyn SOMType>> {
+        let mut members = Vec::new();
+        for (i, value) in get_complex_type_items(type_decls).into_iter().enumerate() {
+            if let Some(type_decl) = type_decls.get(i).as_ref() {
+                if let Some(key) = type_decl.get_data_id() {
+                    if type_decl.is_mandatory() {
+                        if let Ok(member) = SOMOptional::required(key, value) {
+                            members.push(member);
+                        }
+                    } else if let Ok(member) = SOMOptional::optional(key, value) {
+                        members.push(member);
+                    }
+                }
+            }
+        }
+
+        Some(Box::new(
+            SOMOptional::from(get_length_field(lengthfield_size), members)
+                .with_meta(SOMTypeMeta::from(name, description)),
+        ))
+    }
+
+    fn get_union_type(
+        name: String,
+        description: String,
+        type_decls: &[FibexTypeDeclaration],
+        typefield_size: usize,
+    ) -> Option<Box<dyn SOMType>> {
+        Some(Box::new(
+            SOMUnion::from(
+                get_type_field(typefield_size),
+                get_complex_type_items(type_decls),
+            )
+            .with_meta(SOMTypeMeta::from(name, description)),
+        ))
+    }
+
+    fn get_complex_type_items(type_decls: &[FibexTypeDeclaration]) -> Vec<wrapper::SOMTypeWrapper> {
+        let mut items = Vec::new();
+
+        for type_decl in type_decls {
+            if let Some(type_ref) = &type_decl.type_ref {
                 let type_def = type_ref.borrow();
 
-                if let Some(member_type) = get_type(member) {
-                    if member.is_array() {
-                        if let Some(array_type) = get_array_type(member) {
-                            if member.is_multidim_array() {
+                if let Some(member_type) = get_type(type_decl) {
+                    if type_decl.is_array() {
+                        if let Some(array_type) = get_array_type(type_decl) {
+                            if type_decl.is_multidim_array() {
                                 if let Some(element) =
                                     (*array_type).as_any().downcast_ref::<SOMArray>()
                                 {
-                                    elements.push(SOMStructMember::Array(element.clone()));
-                                };
+                                    items.push(wrapper::SOMTypeWrapper::Array(element.clone()));
+                                }
                             } else {
                                 match &type_def.datatype {
                                     FibexDatatype::Primitive(datatype) => {
                                         if let Some(element) =
                                             get_primitive_array_struct_member(array_type, datatype)
                                         {
-                                            elements.push(element);
+                                            items.push(element);
                                         }
                                     }
-                                    FibexDatatype::Struct(_) => {
+                                    FibexDatatype::Complex(_) => {
                                         if let Some(element) =
                                             (*member_type).as_any().downcast_ref::<SOMArray>()
                                         {
-                                            elements.push(SOMStructMember::Array(element.clone()));
-                                        };
+                                            items.push(wrapper::SOMTypeWrapper::Array(
+                                                element.clone(),
+                                            ));
+                                        }
                                     }
                                     FibexDatatype::Enum(_) => {
                                         if let Some(element) =
                                             (*member_type).as_any().downcast_ref::<SOMArray>()
                                         {
-                                            elements.push(SOMStructMember::Array(element.clone()));
-                                        };
+                                            items.push(wrapper::SOMTypeWrapper::Array(
+                                                element.clone(),
+                                            ));
+                                        }
                                     }
                                     FibexDatatype::String(_) => {
                                         if let Some(element) =
                                             (*member_type).as_any().downcast_ref::<SOMArray>()
                                         {
-                                            elements.push(SOMStructMember::Array(element.clone()));
-                                        };
+                                            items.push(wrapper::SOMTypeWrapper::Array(
+                                                element.clone(),
+                                            ));
+                                        }
                                     }
                                     _ => {
                                         warn!("nyi: {:?}", &type_def.datatype);
@@ -681,44 +773,49 @@ mod types {
                                 if let Some(element) =
                                     get_primitive_struct_member(member_type, datatype)
                                 {
-                                    elements.push(element);
+                                    items.push(element);
                                 }
                             }
-                            FibexDatatype::Struct(_) => {
+                            FibexDatatype::Complex(_) => {
                                 if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMStruct>()
                                 {
-                                    elements.push(SOMStructMember::Struct(element.clone()));
-                                };
+                                    items.push(wrapper::SOMTypeWrapper::Struct(element.clone()));
+                                } else if let Some(element) =
+                                    (*member_type).as_any().downcast_ref::<SOMOptional>()
+                                {
+                                    items.push(wrapper::SOMTypeWrapper::Optional(element.clone()));
+                                } else if let Some(element) =
+                                    (*member_type).as_any().downcast_ref::<SOMUnion>()
+                                {
+                                    items.push(wrapper::SOMTypeWrapper::Union(element.clone()));
+                                }
                             }
                             FibexDatatype::Enum(_) => {
                                 if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMu8Enum>()
                                 {
-                                    elements.push(SOMStructMember::EnumU8(element.clone()));
-                                };
-                                if let Some(element) =
+                                    items.push(wrapper::SOMTypeWrapper::EnumU8(element.clone()));
+                                } else if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMu16Enum>()
                                 {
-                                    elements.push(SOMStructMember::EnumU16(element.clone()));
-                                };
-                                if let Some(element) =
+                                    items.push(wrapper::SOMTypeWrapper::EnumU16(element.clone()));
+                                } else if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMu32Enum>()
                                 {
-                                    elements.push(SOMStructMember::EnumU32(element.clone()));
-                                };
-                                if let Some(element) =
+                                    items.push(wrapper::SOMTypeWrapper::EnumU32(element.clone()));
+                                } else if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMu64Enum>()
                                 {
-                                    elements.push(SOMStructMember::EnumU64(element.clone()));
-                                };
+                                    items.push(wrapper::SOMTypeWrapper::EnumU64(element.clone()));
+                                }
                             }
                             FibexDatatype::String(_) => {
                                 if let Some(element) =
                                     (*member_type).as_any().downcast_ref::<SOMString>()
                                 {
-                                    elements.push(SOMStructMember::String(element.clone()));
-                                };
+                                    items.push(wrapper::SOMTypeWrapper::String(element.clone()));
+                                }
                             }
                             _ => {
                                 warn!("nyi: {:?}", &type_def.datatype);
@@ -729,9 +826,7 @@ mod types {
             }
         }
 
-        Some(Box::new(
-            SOMStruct::from(elements).with_meta(SOMTypeMeta::from(name, description)),
-        ))
+        items
     }
 
     fn get_primitive_array_struct_member(
@@ -742,67 +837,67 @@ mod types {
             FibexPrimitive::Bool => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMBoolArray>() {
                     return Some(SOMStructMember::ArrayBool(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint8 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMu8Array>() {
                     return Some(SOMStructMember::ArrayU8(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int8 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMi8Array>() {
                     return Some(SOMStructMember::ArrayI8(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint16 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMu16Array>() {
                     return Some(SOMStructMember::ArrayU16(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int16 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMi16Array>() {
                     return Some(SOMStructMember::ArrayI16(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint24 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMu24Array>() {
                     return Some(SOMStructMember::ArrayU24(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int24 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMi24Array>() {
                     return Some(SOMStructMember::ArrayI24(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint32 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMu32Array>() {
                     return Some(SOMStructMember::ArrayU32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int32 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMi32Array>() {
                     return Some(SOMStructMember::ArrayI32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint64 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMu64Array>() {
                     return Some(SOMStructMember::ArrayU64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int64 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMi64Array>() {
                     return Some(SOMStructMember::ArrayI64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Float32 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMf32Array>() {
                     return Some(SOMStructMember::ArrayF32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Float64 => {
                 if let Some(item) = (*array).as_any().downcast_ref::<SOMf64Array>() {
                     return Some(SOMStructMember::ArrayF64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Unknown => {
                 return None;
@@ -820,67 +915,67 @@ mod types {
             FibexPrimitive::Bool => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMBool>() {
                     return Some(SOMStructMember::Bool(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint8 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMu8>() {
                     return Some(SOMStructMember::U8(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int8 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMi8>() {
                     return Some(SOMStructMember::I8(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint16 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMu16>() {
                     return Some(SOMStructMember::U16(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int16 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMi16>() {
                     return Some(SOMStructMember::I16(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint24 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMu24>() {
                     return Some(SOMStructMember::U24(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int24 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMi24>() {
                     return Some(SOMStructMember::I24(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint32 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMu32>() {
                     return Some(SOMStructMember::U32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int32 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMi32>() {
                     return Some(SOMStructMember::I32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Uint64 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMu64>() {
                     return Some(SOMStructMember::U64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Int64 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMi64>() {
                     return Some(SOMStructMember::I64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Float32 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMf32>() {
                     return Some(SOMStructMember::F32(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Float64 => {
                 if let Some(item) = (*member).as_any().downcast_ref::<SOMf64>() {
                     return Some(SOMStructMember::F64(item.clone()));
-                };
+                }
             }
             FibexPrimitive::Unknown => {
                 return None;
@@ -899,9 +994,9 @@ mod types {
         match &datatype.primitive {
             FibexPrimitive::Uint8 => {
                 let mut items = Vec::new();
-                for variant in &datatype.variants {
-                    if let Ok(value) = variant.value.parse::<u8>() {
-                        items.push(SOMEnum::from(variant.name.clone(), value));
+                for element in &datatype.elements {
+                    if let Ok(value) = element.value.parse::<u8>() {
+                        items.push(SOMEnum::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -910,9 +1005,9 @@ mod types {
             }
             FibexPrimitive::Uint16 => {
                 let mut items = Vec::new();
-                for variant in &datatype.variants {
-                    if let Ok(value) = variant.value.parse::<u16>() {
-                        items.push(SOMEnum::from(variant.name.clone(), value));
+                for element in &datatype.elements {
+                    if let Ok(value) = element.value.parse::<u16>() {
+                        items.push(SOMEnum::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -921,9 +1016,9 @@ mod types {
             }
             FibexPrimitive::Uint32 => {
                 let mut items = Vec::new();
-                for variant in &datatype.variants {
-                    if let Ok(value) = variant.value.parse::<u32>() {
-                        items.push(SOMEnum::from(variant.name.clone(), value));
+                for element in &datatype.elements {
+                    if let Ok(value) = element.value.parse::<u32>() {
+                        items.push(SOMEnum::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -932,9 +1027,9 @@ mod types {
             }
             FibexPrimitive::Uint64 => {
                 let mut items = Vec::new();
-                for variant in &datatype.variants {
-                    if let Ok(value) = variant.value.parse::<u64>() {
-                        items.push(SOMEnum::from(variant.name.clone(), value));
+                for element in &datatype.elements {
+                    if let Ok(value) = element.value.parse::<u64>() {
+                        items.push(SOMEnum::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -951,7 +1046,7 @@ mod types {
         description: String,
         datatype: &FibexString,
         endian: SOMEndian,
-        lengthfield: usize,
+        lengthfield_size: usize,
         bit_length: Option<usize>,
         min_bit_length: Option<usize>,
         max_bit_length: Option<usize>,
@@ -994,8 +1089,14 @@ mod types {
 
         match is_dynamic {
             true => Some(Box::new(
-                SOMString::dynamic(get_length_field(lengthfield), encoding, format, min, max)
-                    .with_meta(SOMTypeMeta::from(name, description)),
+                SOMString::dynamic(
+                    get_length_field(lengthfield_size),
+                    encoding,
+                    format,
+                    min,
+                    max,
+                )
+                .with_meta(SOMTypeMeta::from(name, description)),
             )),
             false => Some(Box::new(
                 SOMString::fixed(encoding, format, max)
@@ -1017,6 +1118,15 @@ mod types {
             2 => SOMLengthField::U16,
             4 => SOMLengthField::U32,
             _ => SOMLengthField::None,
+        }
+    }
+
+    fn get_type_field(size: usize) -> SOMTypeField {
+        match size {
+            1 => SOMTypeField::U8,
+            2 => SOMTypeField::U16,
+            4 => SOMTypeField::U32,
+            _ => SOMTypeField::U32,
         }
     }
 }
@@ -1497,6 +1607,170 @@ mod tests {
                     'bar',
                 ],
             }  
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
+    }
+
+    #[test]
+    fn test_parse_union_request() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+
+        let reader = FibexReader::from_file(file).unwrap();
+        let model = FibexParser::try_parse(reader).expect("fibex error");
+
+        let fibex_type = model
+            .get_service(123, 1)
+            .unwrap()
+            .get_method(9)
+            .unwrap()
+            .get_request()
+            .unwrap();
+
+        let mut som_type = FibexTypes::build(fibex_type).expect("build error");
+
+        let payload = &[
+            0x00, 0x00, 0x00, 0x02, // Type-Field (U32)
+            0x00, 0x00, 0x00, 0x01, // U32 Member
+        ];
+
+        let mut parser = SOMParser::new(payload);
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                input (AUnion) {
+                    member2 (UINT32) : 1
+                },
+            }
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
+    }
+
+    #[test]
+    fn test_parse_array_of_union_response() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+
+        let reader = FibexReader::from_file(file).unwrap();
+        let model = FibexParser::try_parse(reader).expect("fibex error");
+
+        let fibex_type = model
+            .get_service(123, 1)
+            .unwrap()
+            .get_method(9)
+            .unwrap()
+            .get_response()
+            .unwrap();
+
+        let mut som_type = FibexTypes::build(fibex_type).expect("build error");
+
+        let payload = &[
+            0x00, 0x01, // Type-Field (U16)
+            0x01, // U8 Member
+            0x00, 0x02, // Type-Field (U16)
+            0x00, 0x00, 0x00, 0x01, // U32 Member
+        ];
+
+        let mut parser = SOMParser::new(payload);
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                output (AUnion) [
+                    {
+                        member1 (UINT8) : 1
+                    },
+                    {
+                        member2 (UINT32) : 1
+                    },
+                ],
+            }
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
+    }
+
+    #[test]
+    fn test_parse_optional_request() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+
+        let reader = FibexReader::from_file(file).unwrap();
+        let model = FibexParser::try_parse(reader).expect("fibex error");
+
+        let fibex_type = model
+            .get_service(123, 1)
+            .unwrap()
+            .get_method(100)
+            .unwrap()
+            .get_request()
+            .unwrap();
+
+        let mut som_type = FibexTypes::build(fibex_type).expect("build error");
+
+        let payload = &[
+            0x00, 0x00, 0x00, 0x04, // Length-Field (U32)
+            0x10, 0x02, // TLV-Tag (U16)
+            0x00, 0x01, // U16 Member
+        ];
+
+        let mut parser = SOMParser::new(payload);
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                input (AOptional) {
+                    <2> member2 (UINT16) : 1,
+                },
+            }
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
+    }
+
+    #[test]
+    fn test_parse_array_of_optional_response() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+
+        let reader = FibexReader::from_file(file).unwrap();
+        let model = FibexParser::try_parse(reader).expect("fibex error");
+
+        let fibex_type = model
+            .get_service(123, 1)
+            .unwrap()
+            .get_method(100)
+            .unwrap()
+            .get_response()
+            .unwrap();
+
+        let mut som_type = FibexTypes::build(fibex_type).expect("build error");
+
+        let payload = &[
+            0x00, 0x04, // Length-Field (U16)
+            0x10, 0x02, // TLV-Tag (U16)
+            0x00, 0x01, // U16 Member
+            0x00, 0x07, // Length-Field (U16)
+            0x00, 0x01, // TLV-Tag (U16)
+            0x01, // BOOL Member
+            0x10, 0x02, // TLV-Tag (U16)
+            0x00, 0x01, // U16 Member
+        ];
+
+        let mut parser = SOMParser::new(payload);
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                output (AOptional) [
+                    {
+                        <2> member2 (UINT16) : 1,
+                    },
+                    {
+                        <1> member1 (BOOL) : true,
+                        <2> member2 (UINT16) : 1,
+                    },
+                ],
+            }
         "#;
 
         assert_str(expected, &format!("{}", som_type));
