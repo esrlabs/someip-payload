@@ -1,13 +1,32 @@
-// someip builder
+//! Contains the FIBEX to SOME/IP transformation.
 
 use crate::fibex::*;
 use crate::som::*;
 
+/// Builder for FIBEX types.
 pub struct FibexTypes;
 
 impl FibexTypes {
+    /// Returns a SOME/IP type for the given FIBEX declaration or an error.
+    ///
+    /// Example
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use someip_payload::fibex::*;
+    /// # use someip_payload::fibex2som::*;
+    /// # let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+    /// # let reader = FibexReader::from_file(file)?;
+    /// let model = FibexParser::parse(reader)?;
+    /// let request = model
+    ///     .get_service(123, 1).unwrap()
+    ///     .get_method(32768).unwrap()
+    ///     .get_request().unwrap();
+    ///
+    /// let obj = FibexTypes::build(request)?;
+    /// # Ok::<(), FibexError>(())
+    /// ```
     pub fn build(type_decl: &FibexTypeDeclaration) -> Result<Box<dyn SOMType>, FibexError> {
-        if let Some(result) = types::get_type(type_decl) {
+        if let Some(result) = builder::get_type(type_decl) {
             return Ok(result);
         }
 
@@ -18,10 +37,11 @@ impl FibexTypes {
     }
 }
 
-mod types {
+#[doc(hidden)]
+mod builder {
     use super::*;
 
-    pub fn get_type(type_decl: &FibexTypeDeclaration) -> Option<Box<dyn SOMType>> {
+    pub(super) fn get_type(type_decl: &FibexTypeDeclaration) -> Option<Box<dyn SOMType>> {
         if type_decl.is_array() {
             return get_array_type(type_decl);
         } else if let Some(type_ref) = &type_decl.type_ref {
@@ -79,7 +99,7 @@ mod types {
         None
     }
 
-    pub fn get_array_type(type_decl: &FibexTypeDeclaration) -> Option<Box<dyn SOMType>> {
+    fn get_array_type(type_decl: &FibexTypeDeclaration) -> Option<Box<dyn SOMType>> {
         let multidim = type_decl.is_multidim_array();
 
         if let Some(dimension) = type_decl.get_array_dimension(0) {
@@ -234,7 +254,7 @@ mod types {
         None
     }
 
-    pub fn get_multidim_primitive_array_type(
+    fn get_multidim_primitive_array_type(
         name: String,
         description: String,
         element: Box<dyn SOMType>,
@@ -420,7 +440,7 @@ mod types {
         None
     }
 
-    pub fn get_primitive_array_type(
+    fn get_primitive_array_type(
         name: String,
         description: String,
         element: Box<dyn SOMType>,
@@ -996,7 +1016,7 @@ mod types {
                 let mut items = Vec::new();
                 for element in &datatype.elements {
                     if let Ok(value) = element.value.parse::<u8>() {
-                        items.push(SOMEnum::from(element.name.clone(), value));
+                        items.push(SOMu8EnumItem::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -1007,7 +1027,7 @@ mod types {
                 let mut items = Vec::new();
                 for element in &datatype.elements {
                     if let Ok(value) = element.value.parse::<u16>() {
-                        items.push(SOMEnum::from(element.name.clone(), value));
+                        items.push(SOMu16EnumItem::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -1018,7 +1038,7 @@ mod types {
                 let mut items = Vec::new();
                 for element in &datatype.elements {
                     if let Ok(value) = element.value.parse::<u32>() {
-                        items.push(SOMEnum::from(element.name.clone(), value));
+                        items.push(SOMu32EnumItem::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -1029,7 +1049,7 @@ mod types {
                 let mut items = Vec::new();
                 for element in &datatype.elements {
                     if let Ok(value) = element.value.parse::<u64>() {
-                        items.push(SOMEnum::from(element.name.clone(), value));
+                        items.push(SOMu64EnumItem::from(element.name.clone(), value));
                     }
                 }
                 Some(Box::new(
@@ -1550,7 +1570,7 @@ mod tests {
         let mut som_type = FibexTypes::build(fibex_type).expect("build error");
 
         let payload = &[
-            0x00, 0x0A, // Lenght-Field (U16)
+            0x00, 0x0A, // Length-Field (U16)
             0xFE, 0xFF, // BOM
             0x00, 0x66, 0x00, 0x6F, 0x00, 0x6F, // Content
             0x00, 0x00, // Termination
@@ -1586,12 +1606,12 @@ mod tests {
         let mut som_type = FibexTypes::build(fibex_type).expect("build error");
 
         let payload = &[
-            0x00, 0x18, // Array Lenght-Field (U16)
-            0x00, 0x0A, // String Lenght-Field (U16)
+            0x00, 0x18, // Array Length-Field (U16)
+            0x00, 0x0A, // String Length-Field (U16)
             0xFF, 0xFE, // BOM
             0x66, 0x00, 0x6F, 0x00, 0x6F, 0x00, // Content
             0x00, 0x00, // Termination
-            0x00, 0x0A, // String Lenght-Field (U16)
+            0x00, 0x0A, // String Length-Field (U16)
             0xFF, 0xFE, // BOM
             0x62, 0x00, 0x61, 0x00, 0x72, 0x00, // Content
             0x00, 0x00, // Termination

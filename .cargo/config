@@ -1,0 +1,4 @@
+[build]
+
+# Lib uses public re-export pattern.
+rustdocflags = ["--document-private-items"]

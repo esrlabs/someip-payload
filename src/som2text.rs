@@ -1,4 +1,4 @@
-// someip output
+//! Contains the textual representation for SOME/IP types.
 
 use crate::som::*;
 use std::any::Any;
@@ -162,7 +162,7 @@ mod enums {
 
             let mut dd = String::from("");
             if self.len() > 0 {
-                if let Some(value) = &self.value() {
+                if let Some(value) = &self.get() {
                     dd = format!("\n\t{}", value);
                 } else {
                     dd = String::from("\n\t'?'");
@@ -468,8 +468,8 @@ mod tests {
         assert_eq!("name", format!("{}", obj));
 
         obj = SOMu8Enum::from(vec![
-            SOMEnum::from(String::from("A"), 23u8),
-            SOMEnum::from(String::from("B"), 42u8),
+            SOMu8EnumItem::from(String::from("A"), 23u8),
+            SOMu8EnumItem::from(String::from("B"), 42u8),
         ]);
 
         assert_eq!(
@@ -504,8 +504,8 @@ mod tests {
         let mut obj = SOMu16Enum::from(
             SOMEndian::Big,
             vec![
-                SOMEnum::from(String::from("A"), 49200u16),
-                SOMEnum::from(String::from("B"), 49201u16),
+                SOMu16EnumItem::from(String::from("A"), 49200u16),
+                SOMu16EnumItem::from(String::from("B"), 49201u16),
             ],
         );
 
