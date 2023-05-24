@@ -752,7 +752,7 @@ pub enum FibexCodingAttribute {
 pub struct FibexParser;
 
 impl FibexParser {
-    /// Returns a model parsend from the given reader or an error.
+    /// Returns a model parsend from the given sources or an error.
     ///
     /// Example
     /// ```
@@ -762,14 +762,14 @@ impl FibexParser {
     /// # let string = "";
     /// # let input = BufReader::new(StringReader::new(string));
     /// let reader = FibexReader::from_reader(input)?;
-    /// let model = FibexParser::parse(reader)?;
+    /// let model = FibexParser::parse(vec![reader])?;
     /// # Ok::<(), FibexError>(())
     /// ```
-    pub fn parse<R: Read>(reader: FibexReader<BufReader<R>>) -> Result<FibexModel, FibexError> {
-        parser::parse_fibex(reader, true)
+    pub fn parse<R: Read>(sources: Vec<FibexReader<BufReader<R>>>) -> Result<FibexModel, FibexError> {
+        parser::parse_fibex(sources, true)
     }
 
-    /// Returns a model parsend from the given reader or an error,
+    /// Returns a model parsend from the given sources or an error,
     /// while ignoring unresolved type references.
     ///
     ///
@@ -781,11 +781,11 @@ impl FibexParser {
     /// # let string = "";
     /// # let input = BufReader::new(StringReader::new(string));
     /// let reader = FibexReader::from_reader(input)?;
-    /// let model = FibexParser::try_parse(reader)?;
+    /// let model = FibexParser::try_parse(vec![reader])?;
     /// # Ok::<(), FibexError>(())
     /// ```
-    pub fn try_parse<R: Read>(reader: FibexReader<BufReader<R>>) -> Result<FibexModel, FibexError> {
-        parser::parse_fibex(reader, false)
+    pub fn try_parse<R: Read>(sources: Vec<FibexReader<BufReader<R>>>) -> Result<FibexModel, FibexError> {
+        parser::parse_fibex(sources, false)
     }
 }
 
@@ -795,44 +795,46 @@ mod parser {
     use super::*;
 
     pub(super) fn parse_fibex<R: Read>(
-        mut reader: FibexReader<BufReader<R>>,
+        sources: Vec<FibexReader<BufReader<R>>>,
         strict: bool,
     ) -> Result<FibexModel, FibexError> {
         let mut model = FibexModel::new();
 
-        loop {
-            match reader.read()? {
-                FibexEvent::ServiceStart(id) => {
-                    let (service, mut service_types) = parse_service_interface(&mut reader, id)?;
-                    model.services.push(service);
-                    model.types.append(&mut service_types);
-                }
-                FibexEvent::DatatypeStart(id, datatype_type) => {
-                    if datatype_type == "fx:COMMON-DATATYPE-TYPE" {
-                        model.types.push(Rc::new(RefCell::new(parse_common_datatype(
-                            &mut reader,
-                            id,
-                        )?)));
-                    } else if datatype_type == "fx:COMPLEX-DATATYPE-TYPE" {
-                        model
-                            .types
-                            .push(Rc::new(RefCell::new(parse_complex_datatype(
+        for mut reader in sources {
+            loop {
+                match reader.read()? {
+                    FibexEvent::ServiceStart(id) => {
+                        let (service, mut service_types) = parse_service_interface(&mut reader, id)?;
+                        model.services.push(service);
+                        model.types.append(&mut service_types);
+                    }
+                    FibexEvent::DatatypeStart(id, datatype_type) => {
+                        if datatype_type == "fx:COMMON-DATATYPE-TYPE" {
+                            model.types.push(Rc::new(RefCell::new(parse_common_datatype(
                                 &mut reader,
                                 id,
                             )?)));
-                    } else if datatype_type == "fx:ENUM-DATATYPE-TYPE" {
-                        model
-                            .types
-                            .push(Rc::new(RefCell::new(parse_enum_datatype(&mut reader, id)?)));
+                        } else if datatype_type == "fx:COMPLEX-DATATYPE-TYPE" {
+                            model
+                                .types
+                                .push(Rc::new(RefCell::new(parse_complex_datatype(
+                                    &mut reader,
+                                    id,
+                                )?)));
+                        } else if datatype_type == "fx:ENUM-DATATYPE-TYPE" {
+                            model
+                                .types
+                                .push(Rc::new(RefCell::new(parse_enum_datatype(&mut reader, id)?)));
+                        }
                     }
+                    FibexEvent::ProcessingInfoStart => {
+                        model
+                            .codings
+                            .append(&mut parse_processing_info(&mut reader, "ProcessingInfo")?);
+                    }
+                    FibexEvent::Eof => break,
+                    _ => {}
                 }
-                FibexEvent::ProcessingInfoStart => {
-                    model
-                        .codings
-                        .append(&mut parse_processing_info(&mut reader, "ProcessingInfo")?);
-                }
-                FibexEvent::Eof => break,
-                _ => {}
             }
         }
 
@@ -1647,7 +1649,7 @@ impl FibexReader<BufReader<File>> {
     /// ```
     /// # use std::path::PathBuf;
     /// # use someip_payload::fibex::*;
-    /// # let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+    /// # let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
     /// let file = PathBuf::from(path);
     /// let reader = FibexReader::from_file(file)?;
     /// # Ok::<(), FibexError>(())
@@ -2160,7 +2162,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(0, model.types.len());
         assert_eq!(1, model.services.len());
@@ -2221,7 +2223,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
         assert_eq!(1, model.services.len());
@@ -2366,7 +2368,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(1, model.services.len());
         let service = model.services.get(0).unwrap();
@@ -2450,7 +2452,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(2, model.types.len());
         assert_eq!(1, model.services.len());
@@ -2566,7 +2568,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(2, model.types.len());
         assert_eq!(1, model.services.len());
@@ -2729,7 +2731,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(1, model.services.len());
         let service = model.services.get(0).unwrap();
@@ -2815,7 +2817,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
 
@@ -2873,7 +2875,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(2, model.types.len());
         assert_eq!(2, model.codings.len());
@@ -2931,7 +2933,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
 
@@ -3067,7 +3069,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(5, model.types.len());
 
@@ -3234,7 +3236,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
 
@@ -3344,7 +3346,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
 
@@ -3448,7 +3450,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(1, model.types.len());
         assert_eq!(1, model.codings.len());
@@ -3557,7 +3559,7 @@ mod tests {
         "#;
 
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
-        let model = FibexParser::parse(reader).expect("parse failed");
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
         assert_eq!(3, model.types.len());
         assert_eq!(2, model.codings.len());
@@ -3621,11 +3623,64 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_fibex_file() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+    fn test_parse_single_fibex_file() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("parse failed");
+        let model = FibexParser::try_parse(vec![reader]).expect("parse failed");
+
+        assert_eq!(1, model.services.len());
+        assert_eq!(19, model.services.get(0).unwrap().methods.len());
+        assert_eq!(39, model.types.len());
+        assert_eq!(3, model.codings.len());
+
+        let mut num_primitives = 0;
+        let mut num_structs = 0;
+        let mut num_optionals = 0;
+        let mut num_unions = 0;
+        let mut num_enums = 0;
+        let mut num_strings = 0;
+
+        for item in model.types {
+            if let FibexDatatype::Primitive(_) = item.borrow().datatype {
+                num_primitives += 1;
+            }
+            if let FibexDatatype::Complex(FibexComplex::Struct(_)) = item.borrow().datatype {
+                num_structs += 1;
+            }
+            if let FibexDatatype::Complex(FibexComplex::Optional(_)) = item.borrow().datatype {
+                num_optionals += 1;
+            }
+            if let FibexDatatype::Complex(FibexComplex::Union(_)) = item.borrow().datatype {
+                num_unions += 1;
+            }
+            if let FibexDatatype::Enum(_) = item.borrow().datatype {
+                num_enums += 1;
+            }
+            if let FibexDatatype::String(_) = item.borrow().datatype {
+                num_strings += 1;
+            }
+        }
+
+        assert_eq!(8, num_primitives);
+        assert_eq!(26, num_structs);
+        assert_eq!(1, num_optionals);
+        assert_eq!(1, num_unions);
+        assert_eq!(1, num_enums);
+        assert_eq!(2, num_strings);
+    }
+
+    #[test]
+    fn test_parse_multiple_fibex_files() {
+        let files = vec![
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/multiple/package.xml"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/multiple/processing.xml"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/multiple/service.xml"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/multiple/types.xml"),
+        ];
+
+        let sources = files.iter().map(|file| FibexReader::from_file(file).unwrap() ).collect();
+        let model = FibexParser::try_parse(sources).expect("parse failed");
 
         assert_eq!(1, model.services.len());
         assert_eq!(19, model.services.get(0).unwrap().methods.len());

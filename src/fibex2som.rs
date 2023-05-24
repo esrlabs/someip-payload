@@ -14,9 +14,9 @@ impl FibexTypes {
     /// # use std::path::PathBuf;
     /// # use someip_payload::fibex::*;
     /// # use someip_payload::fibex2som::*;
-    /// # let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+    /// # let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
     /// # let reader = FibexReader::from_file(file)?;
-    /// let model = FibexParser::parse(reader)?;
+    /// let model = FibexParser::parse(vec![reader])?;
     /// let request = model
     ///     .get_service(123, 1).unwrap()
     ///     .get_method(32768).unwrap()
@@ -1166,10 +1166,10 @@ mod tests {
 
     #[test]
     fn test_parse_primitive_event() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1199,10 +1199,10 @@ mod tests {
 
     #[test]
     fn test_parse_struct_of_primitives_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1236,10 +1236,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_primitives_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1276,10 +1276,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_structs_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1324,10 +1324,10 @@ mod tests {
 
     #[test]
     fn test_parse_primitive_field_setter() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1357,10 +1357,10 @@ mod tests {
 
     #[test]
     fn test_parse_primitive_field_getter() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1390,10 +1390,10 @@ mod tests {
 
     #[test]
     fn test_parse_enum_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1425,10 +1425,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_enum_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1470,10 +1470,10 @@ mod tests {
 
     #[test]
     fn test_parse_multidim_array_field_notifier() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1520,10 +1520,10 @@ mod tests {
 
     #[test]
     fn test_parse_fixed_string_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1554,10 +1554,10 @@ mod tests {
 
     #[test]
     fn test_parse_dynamic_string_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1590,10 +1590,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_dynamic_string_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1634,10 +1634,10 @@ mod tests {
 
     #[test]
     fn test_parse_union_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1670,10 +1670,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_union_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1713,10 +1713,10 @@ mod tests {
 
     #[test]
     fn test_parse_optional_request() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
@@ -1750,10 +1750,10 @@ mod tests {
 
     #[test]
     fn test_parse_array_of_optional_response() {
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fibex-model.xml");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
         let reader = FibexReader::from_file(file).unwrap();
-        let model = FibexParser::try_parse(reader).expect("fibex error");
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
 
         let fibex_type = model
             .get_service(123, 1)
