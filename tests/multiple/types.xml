@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx">
+    <fx:PROJECT>
+    <ho:SHORT-NAME>test</ho:SHORT-NAME>
+    </fx:PROJECT>
+    <fx:ELEMENTS>
+    <fx:DATATYPES>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_BOOL">
+            <ho:SHORT-NAME>BOOL</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT8">
+            <ho:SHORT-NAME>UINT8</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT16">
+            <ho:SHORT-NAME>UINT16</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT32">
+            <ho:SHORT-NAME>UINT32</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_INT8">
+            <ho:SHORT-NAME>INT8</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_INT16">
+            <ho:SHORT-NAME>INT16</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_INT32">
+            <ho:SHORT-NAME>INT32</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_FLOAT32">
+            <ho:SHORT-NAME>FLOAT32</ho:SHORT-NAME>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_STRINGUTF8FIXED">
+            <ho:SHORT-NAME>STRINGUTF8FIXED</ho:SHORT-NAME>
+            <fx:CODING-REF ID-REF="/Coding_STRINGUTF8FIXED"/>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_STRINGUTF16DYNAMIC">
+            <ho:SHORT-NAME>STRINGUTF16DYNAMIC</ho:SHORT-NAME>
+            <fx:CODING-REF ID-REF="/Coding_STRINGUTF16DYNAMIC"/>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:ENUM-DATATYPE-TYPE" ID="/SOMEIP/TEST/EnumDatatype_AEnum">
+            <ho:SHORT-NAME>AEnum</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:CODING-REF ID-REF="/Coding_UINT16"/>
+            <fx:ENUMERATION-ELEMENTS>
+                <fx:ENUM-ELEMENT>
+                    <fx:VALUE>1</fx:VALUE>
+                    <fx:SYNONYM>A</fx:SYNONYM>
+                </fx:ENUM-ELEMENT>
+                <fx:ENUM-ELEMENT>
+                    <fx:VALUE>2</fx:VALUE>
+                    <fx:SYNONYM>B</fx:SYNONYM>
+                </fx:ENUM-ELEMENT>
+                <fx:ENUM-ELEMENT>
+                    <fx:VALUE>3</fx:VALUE>
+                    <fx:SYNONYM>C</fx:SYNONYM>
+                </fx:ENUM-ELEMENT>
+            </fx:ENUMERATION-ELEMENTS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/SOMEIP/TEST/ComplexDatatype_AStruct">
+            <ho:SHORT-NAME>AStruct</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AStruct/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AStruct/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/SOMEIP/TEST/ComplexDatatype_AOptional">
+            <ho:SHORT-NAME>AOptional</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AOptional/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_BOOL"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                <fx:DATA-ID>1</fx:DATA-ID>
+                <fx:MANDATORY>false</fx:MANDATORY>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AOptional/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT16"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                <fx:DATA-ID>2</fx:DATA-ID>
+                <fx:MANDATORY>true</fx:MANDATORY>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/SOMEIP/TEST/ComplexDatatype_AUnion">
+            <ho:SHORT-NAME>AUnion</ho:SHORT-NAME>
+            <fx:PACKAGE-REF ID-REF="/SOMEIP/TEST"/>
+            <fx:COMPLEX-DATATYPE-CLASS>UNION</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AUnion/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/SOMEIP/TEST/ComplexDatatype_AUnion/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT32"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+    </fx:DATATYPES>
+    </fx:ELEMENTS>
+</fx:FIBEX>

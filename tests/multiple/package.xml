@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx">
+    <fx:PROJECT>
+    <ho:SHORT-NAME>test</ho:SHORT-NAME>
+    </fx:PROJECT>
+    <fx:ELEMENTS>
+    <fx:PACKAGES>
+        <fx:PACKAGE ID="/SOMEIP">
+        <ho:SHORT-NAME>SOMEIP</ho:SHORT-NAME>
+        </fx:PACKAGE>
+        <fx:PACKAGE ID="/SOMEIP/TEST">
+        <ho:SHORT-NAME>TEST</ho:SHORT-NAME>
+        <fx:PACKAGE-REF ID-REF="/SOMEIP"/>
+        </fx:PACKAGE>
+    </fx:PACKAGES>
+    </fx:ELEMENTS>
+</fx:FIBEX>

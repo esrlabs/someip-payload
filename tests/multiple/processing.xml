@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx">
+    <fx:PROJECT>
+    <ho:SHORT-NAME>test</ho:SHORT-NAME>
+    </fx:PROJECT>
+    <fx:PROCESSING-INFORMATION>
+        <fx:CODINGS>
+            <fx:CODING ID="/Coding_UINT16">
+                <ho:SHORT-NAME>UINT16</ho:SHORT-NAME>
+            </fx:CODING>
+            <fx:CODING ID="/Coding_STRINGUTF8FIXED">
+                <ho:SHORT-NAME>STRINGUTF8FIXED</ho:SHORT-NAME>
+                <ho:CODED-TYPE 
+                        ho:BASE-DATA-TYPE="A_UNICODE2STRING" 
+                        CATEGORY="STANDARD-LENGTH-TYPE" 
+                        ENCODING="UTF-8" 
+                        BYTE-ORDER-MARK="NONE"
+                        TERMINATION="NONE"
+                >
+                </ho:CODED-TYPE>
+            </fx:CODING>
+            <fx:CODING ID="/Coding_STRINGUTF16DYNAMIC">
+                <ho:SHORT-NAME>STRINGUTF16DYNAMIC</ho:SHORT-NAME>
+                <ho:CODED-TYPE 
+                    ho:BASE-DATA-TYPE="A_UNICODE2STRING" 
+                    CATEGORY="LEADING-LENGTH-INFO-TYPE" 
+                    ENCODING="UTF-16" 
+                    BYTE-ORDER-MARK="EXPLICIT"
+                    TERMINATION="ZERO"
+                >
+                    <ho:MIN-LENGTH>2</ho:MIN-LENGTH>
+                </ho:CODED-TYPE>
+            </fx:CODING>
+        </fx:CODINGS>
+    </fx:PROCESSING-INFORMATION>
+</fx:FIBEX>
