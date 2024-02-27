@@ -2763,12 +2763,11 @@ pub(crate) mod strings {
         fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
-            let valid: bool;
-            if self.is_dynamic() {
-                valid = (self.min <= length) && (length <= self.max);
+            let valid: bool = if self.is_dynamic() {
+                (self.min <= length) && (length <= self.max)
             } else {
-                valid = length <= self.max;
-            }
+                length <= self.max
+            };
 
             if !valid {
                 return Err(SOMTypeError::InvalidType(format!(

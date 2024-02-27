@@ -631,9 +631,9 @@ impl FibexTypeCoding {
             }
 
             if let Ok(regex) = Regex::new(r"^A_(.*)$") {
-                if let Some(capture) = regex.captures(&*self.base_type()) {
+                if let Some(capture) = regex.captures(&self.base_type()) {
                     if let Some(matcher) = capture.get(1) {
-                        let primitive = FibexPrimitive::from(&*matcher.as_str());
+                        let primitive = FibexPrimitive::from(matcher.as_str());
                         if FibexPrimitive::Unknown != primitive {
                             return Some(FibexDatatype::Primitive(primitive));
                         }
@@ -768,7 +768,9 @@ impl FibexParser {
     /// let model = FibexParser::parse(vec![reader])?;
     /// # Ok::<(), FibexError>(())
     /// ```
-    pub fn parse<R: Read>(sources: Vec<FibexReader<BufReader<R>>>) -> Result<FibexModel, FibexError> {
+    pub fn parse<R: Read>(
+        sources: Vec<FibexReader<BufReader<R>>>,
+    ) -> Result<FibexModel, FibexError> {
         parser::parse_fibex(sources, true)
     }
 
@@ -787,7 +789,9 @@ impl FibexParser {
     /// let model = FibexParser::try_parse(vec![reader])?;
     /// # Ok::<(), FibexError>(())
     /// ```
-    pub fn try_parse<R: Read>(sources: Vec<FibexReader<BufReader<R>>>) -> Result<FibexModel, FibexError> {
+    pub fn try_parse<R: Read>(
+        sources: Vec<FibexReader<BufReader<R>>>,
+    ) -> Result<FibexModel, FibexError> {
         parser::parse_fibex(sources, false)
     }
 }
@@ -807,7 +811,8 @@ mod parser {
             loop {
                 match reader.read()? {
                     FibexEvent::ServiceStart(id) => {
-                        let (service, mut service_types) = parse_service_interface(&mut reader, id)?;
+                        let (service, mut service_types) =
+                            parse_service_interface(&mut reader, id)?;
                         model.services.push(service);
                         model.types.append(&mut service_types);
                     }
@@ -1198,21 +1203,21 @@ mod parser {
                 FibexEvent::MinLength(value) => {
                     if !value.is_empty() {
                         attributes.push(FibexCodingAttribute::MinLength(parse_number(
-                            reader, &*value,
+                            reader, &value,
                         )?));
                     }
                 }
                 FibexEvent::MaxLength(value) => {
                     if !value.is_empty() {
                         attributes.push(FibexCodingAttribute::MaxLength(parse_number(
-                            reader, &*value,
+                            reader, &value,
                         )?));
                     }
                 }
                 FibexEvent::BitLength(value) => {
                     if !value.is_empty() {
                         attributes.push(FibexCodingAttribute::BitLength(parse_number(
-                            reader, &*value,
+                            reader, &value,
                         )?));
                     }
                 }
@@ -3682,7 +3687,10 @@ mod tests {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/multiple/types.xml"),
         ];
 
-        let sources = files.iter().map(|file| FibexReader::from_file(file).unwrap() ).collect();
+        let sources = files
+            .iter()
+            .map(|file| FibexReader::from_file(file).unwrap())
+            .collect();
         let model = FibexParser::try_parse(sources).expect("parse failed");
 
         assert_eq!(1, model.services.len());
