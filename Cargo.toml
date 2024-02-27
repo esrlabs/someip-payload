@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 byteorder = "1"
 log = "0.4"
-quick-xml = "0.22"
+quick-xml = "0.23"
 regex = "1"
 thiserror = "1.0"
 ux = "0.1"

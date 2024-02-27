@@ -31,6 +31,9 @@ pub enum FibexError {
     /// Error on the XML.
     #[error("{}: {0:?}", ERROR_TAG)]
     Xml(#[from] quick_xml::Error),
+    /// Error on the XML attributes.
+    #[error("{}: {0:?}", ERROR_TAG)]
+    XmlAttr(#[from] quick_xml::events::attributes::AttrError),
 }
 
 /// Represents a FIBEX model.
