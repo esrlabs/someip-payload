@@ -53,7 +53,7 @@ mod arrays {
             for i in 0..self.len() {
                 if let Some(element) = self.get(i) {
                     let ddd = format!("{}", element);
-                    dd = format!("{}\n\t{},", dd, ddd.replace("\n", "\n\t"));
+                    dd = format!("{}\n\t{},", dd, ddd.replace('\n', "\n\t"));
                 }
             }
 
@@ -67,7 +67,7 @@ mod arrays {
                 d = String::from("[]");
             }
 
-            write!(f, "{}", d.replace("\t", TAB_SPACES))
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
         }
     }
 }
@@ -87,7 +87,7 @@ mod structs {
             for i in 0..self.len() {
                 if let Some(member) = self.get(i) {
                     let ddd = format!("{}", member);
-                    dd = format!("{}\n\t{},", dd, ddd.replace("\n", "\n\t"));
+                    dd = format!("{}\n\t{},", dd, ddd.replace('\n', "\n\t"));
                 }
             }
 
@@ -101,7 +101,7 @@ mod structs {
                 d = String::from("{}");
             }
 
-            write!(f, "{}", d.replace("\t", TAB_SPACES))
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
         }
     }
 }
@@ -121,7 +121,7 @@ mod unions {
             if self.len() > 0 {
                 if let Some(value) = &self.get() {
                     let ddd = format!("{}", value);
-                    dd = format!("\n\t{}", ddd.replace("\n", "\n\t"));
+                    dd = format!("\n\t{}", ddd.replace('\n', "\n\t"));
                 } else {
                     dd = String::from("\n\t?");
                 }
@@ -137,7 +137,7 @@ mod unions {
                 d = String::from("{?}");
             }
 
-            write!(f, "{}", d.replace("\t", TAB_SPACES))
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
         }
     }
 }
@@ -179,7 +179,7 @@ mod enums {
                 d = String::from("{'?'}");
             }
 
-            write!(f, "{}", d.replace("\t", TAB_SPACES))
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
         }
     }
 
@@ -239,7 +239,7 @@ mod optionals {
             for member in self.members() {
                 if member.is_set() {
                     let ddd = format!("{}", member);
-                    dd = format!("{}\n\t{},", dd, ddd.replace("\n", "\n\t"));
+                    dd = format!("{}\n\t{},", dd, ddd.replace('\n', "\n\t"));
                 }
             }
 
@@ -253,7 +253,7 @@ mod optionals {
                 d = String::from("{}");
             }
 
-            write!(f, "{}", d.replace("\t", TAB_SPACES))
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
         }
     }
 }
@@ -311,14 +311,14 @@ mod tests {
         );
 
         assert_eq!(
-            "array [\n\tu8 : 1,\n\tu8 : 2,\n]".replace("\t", TAB_SPACES),
+            "array [\n\tu8 : 1,\n\tu8 : 2,\n]".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         obj = obj.with_meta(SOMTypeMeta::empty());
 
         assert_eq!(
-            "[\n\tu8 : 1,\n\tu8 : 2,\n]".replace("\t", TAB_SPACES),
+            "[\n\tu8 : 1,\n\tu8 : 2,\n]".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -328,7 +328,7 @@ mod tests {
         ));
 
         assert_eq!(
-            "name (description) [\n\tu8 : 1,\n\tu8 : 2,\n]".replace("\t", TAB_SPACES),
+            "name (description) [\n\tu8 : 1,\n\tu8 : 2,\n]".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -345,7 +345,7 @@ mod tests {
         );
 
         assert_eq!(
-            "array [\n\tarray [\n\t\tu8 : 1,\n\t\tu8 : 2,\n\t],\n]".replace("\t", TAB_SPACES),
+            "array [\n\tarray [\n\t\tu8 : 1,\n\t\tu8 : 2,\n\t],\n]".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
     }
@@ -368,14 +368,14 @@ mod tests {
         ]);
 
         assert_eq!(
-            "struct {\n\tbool : true,\n\tu16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "struct {\n\tbool : true,\n\tu16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         obj = obj.with_meta(SOMTypeMeta::empty());
 
         assert_eq!(
-            "{\n\tbool : true,\n\tu16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "{\n\tbool : true,\n\tu16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -385,7 +385,7 @@ mod tests {
         ));
 
         assert_eq!(
-            "name (description) {\n\tbool : true,\n\tu16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "name (description) {\n\tbool : true,\n\tu16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -396,7 +396,7 @@ mod tests {
 
         assert_eq!(
             "struct {\n\tstruct {\n\t\tbool : true,\n\t\tu16 : 49200,\n\t},\n}"
-                .replace("\t", TAB_SPACES),
+                .replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
     }
@@ -422,7 +422,7 @@ mod tests {
         );
 
         assert_eq!(
-            "union {\n\t?\n}".replace("\t", TAB_SPACES),
+            "union {\n\t?\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -433,14 +433,14 @@ mod tests {
         }
 
         assert_eq!(
-            "union {\n\tu16 : 49200\n}".replace("\t", TAB_SPACES),
+            "union {\n\tu16 : 49200\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         obj = obj.with_meta(SOMTypeMeta::empty());
 
         assert_eq!(
-            "{\n\tu16 : 49200\n}".replace("\t", TAB_SPACES),
+            "{\n\tu16 : 49200\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -450,7 +450,7 @@ mod tests {
         ));
 
         assert_eq!(
-            "name (description) {\n\tu16 : 49200\n}".replace("\t", TAB_SPACES),
+            "name (description) {\n\tu16 : 49200\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
     }
@@ -473,21 +473,21 @@ mod tests {
         ]);
 
         assert_eq!(
-            "enum {\n\t'?'\n}".replace("\t", TAB_SPACES),
+            "enum {\n\t'?'\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         assert!(obj.set(String::from("A")));
 
         assert_eq!(
-            "enum {\n\t'A' : 23\n}".replace("\t", TAB_SPACES),
+            "enum {\n\t'A' : 23\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         obj = obj.with_meta(SOMTypeMeta::empty());
 
         assert_eq!(
-            "{\n\t'A' : 23\n}".replace("\t", TAB_SPACES),
+            "{\n\t'A' : 23\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -497,7 +497,7 @@ mod tests {
         ));
 
         assert_eq!(
-            "name (description) {\n\t'A' : 23\n}".replace("\t", TAB_SPACES),
+            "name (description) {\n\t'A' : 23\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -512,7 +512,7 @@ mod tests {
         assert!(obj.set(String::from("B")));
 
         assert_eq!(
-            "enum {\n\t'B' : 49201\n}".replace("\t", TAB_SPACES),
+            "enum {\n\t'B' : 49201\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
     }
@@ -580,14 +580,14 @@ mod tests {
         }
 
         assert_eq!(
-            "optional {\n\t<1> u16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "optional {\n\t<1> u16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
         obj = obj.with_meta(SOMTypeMeta::empty());
 
         assert_eq!(
-            "{\n\t<1> u16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "{\n\t<1> u16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -597,7 +597,7 @@ mod tests {
         ));
 
         assert_eq!(
-            "name (description) {\n\t<1> u16 : 49200,\n}".replace("\t", TAB_SPACES),
+            "name (description) {\n\t<1> u16 : 49200,\n}".replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
 
@@ -631,7 +631,7 @@ mod tests {
 
         assert_eq!(
             "optional {\n\t<1> struct {\n\t\tbool : true,\n\t\tu16 : 49200,\n\t},\n}"
-                .replace("\t", TAB_SPACES),
+                .replace('\t', TAB_SPACES),
             format!("{}", obj)
         );
     }

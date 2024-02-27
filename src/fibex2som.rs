@@ -1157,7 +1157,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn flatten_str(string: &str) -> String {
-        string.replace(" ", "").replace("\n", "")
+        string.replace(" ", "").replace('\n', "")
     }
 
     fn assert_str(expected: &str, actual: &str) {
