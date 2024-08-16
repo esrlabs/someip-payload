@@ -1523,12 +1523,22 @@ pub(crate) mod arrays {
                 while (parser.offset() - type_start) < type_lengthfield {
                     if let Some(element) = self.get_mut(self.len()) {
                         element.parse(parser)?;
+                    } else {
+                        return Err(SOMTypeError::InvalidPayload(format!(
+                            "Missing Array-Element at offset {}",
+                            offset
+                        )));
                     }
                 }
             } else {
                 for _ in 0..self.max {
                     if let Some(element) = self.get_mut(self.len()) {
                         element.parse(parser)?;
+                    } else {
+                        return Err(SOMTypeError::InvalidPayload(format!(
+                            "Missing Array-Element at offset {}",
+                            offset
+                        )));
                     }
                 }
             }
