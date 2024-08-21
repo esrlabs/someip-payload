@@ -2,12 +2,12 @@
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::any::Any;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use thiserror::Error;
 use ux::{i24, u24};
 
 /// Trait for type serialization.
-pub trait SOMType: Display {
+pub trait SOMType: Display + Debug {
     /// Serializes the type into the provided serializer.
     ///
     /// Returns the number of bytes being consumed from the serializer or an error.
@@ -1363,7 +1363,9 @@ pub(crate) mod arrays {
         meta: Option<SOMTypeMeta>,
         /// The lengthfield of the type.
         lengthfield: SOMLengthField,
-        /// The elements of the type.
+        /// The template for new elements of the type.
+        template: Option<Box<T>>,
+        /// The actual elements of the type.
         elements: Vec<T>,
         /// Current number of elements.
         length: usize,
@@ -1380,6 +1382,7 @@ pub(crate) mod arrays {
             SOMArrayType {
                 meta: None,
                 lengthfield,
+                template: None,
                 elements,
                 length: size,
                 min,
@@ -1388,11 +1391,12 @@ pub(crate) mod arrays {
         }
 
         /// Creates a new empty array of fixed length.
-        pub fn fixed(element: T, size: usize) -> Self {
+        pub fn fixed(template: T, size: usize) -> Self {
             SOMArrayType {
                 meta: None,
                 lengthfield: SOMLengthField::None,
-                elements: vec![element; size],
+                template: Some(Box::new(template)),
+                elements: vec![],
                 length: 0usize,
                 min: size,
                 max: size,
@@ -1400,11 +1404,12 @@ pub(crate) mod arrays {
         }
 
         /// Creates a new empty array of dynamic length.
-        pub fn dynamic(lengthfield: SOMLengthField, element: T, min: usize, max: usize) -> Self {
+        pub fn dynamic(lengthfield: SOMLengthField, template: T, min: usize, max: usize) -> Self {
             SOMArrayType {
                 meta: None,
                 lengthfield,
-                elements: vec![element; max],
+                template: Some(Box::new(template)),
+                elements: vec![],
                 length: 0usize,
                 min,
                 max,
@@ -1447,7 +1452,7 @@ pub(crate) mod arrays {
         ///
         /// Note: The index of the element shall be zero-based.
         pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-            if self.apply_len(index) {
+            if self.update_length(index) {
                 return self.elements.get_mut(index);
             }
 
@@ -1460,11 +1465,20 @@ pub(crate) mod arrays {
         }
 
         #[doc(hidden)]
-        fn apply_len(&mut self, index: usize) -> bool {
+        fn update_length(&mut self, index: usize) -> bool {
             if index < self.max {
-                if index + 1usize > self.len() {
-                    self.length = index + 1usize;
+                let len = index + 1usize;
+                if len > self.length {
+                    if let Some(template) = &self.template {
+                        while len > self.elements.len() {
+                            self.elements.push(*template.clone());
+                        }
+                    } else {
+                        return false;
+                    }
+                    self.length = len;
                 }
+
                 return true;
             }
 
@@ -2864,7 +2878,7 @@ pub(crate) mod strings {
             }
 
             if self.has_termination() {
-                string_size -= self.termination().len();
+                string_size = string_size.saturating_sub(self.termination().len());
             }
 
             let mut valid = true;
@@ -2875,7 +2889,7 @@ pub(crate) mod strings {
                         valid = false;
                         break;
                     }
-                    string_size -= std::mem::size_of::<u8>();
+                    string_size = string_size.saturating_sub(std::mem::size_of::<u8>());
                 }
             }
             if !valid {
