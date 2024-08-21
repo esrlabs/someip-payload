@@ -43,8 +43,8 @@ pub struct FibexModel {
     pub services: Vec<FibexServiceInterface>,
     /// The types of the model.
     pub types: Vec<FibexTypeReference>,
-    #[doc(hidden)]
-    codings: Vec<FibexTypeCoding>,
+    /// The codings of the model.
+    pub codings: Vec<FibexTypeCoding>,
 }
 
 impl FibexModel {
@@ -470,12 +470,6 @@ pub enum FibexDatatype {
     String(FibexString),
 }
 
-impl PartialEq for FibexDatatype {
-    fn eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
-
 /// Different kinds of primitive types.
 #[derive(Debug, PartialEq)]
 pub enum FibexPrimitive {
@@ -511,7 +505,7 @@ pub enum FibexPrimitive {
 
 impl From<&str> for FibexPrimitive {
     fn from(name: &str) -> Self {
-        match name {
+        match name.to_uppercase().as_str() {
             "BOOL" => FibexPrimitive::Bool,
             "UINT8" => FibexPrimitive::Uint8,
             "UINT16" => FibexPrimitive::Uint16,
@@ -591,7 +585,7 @@ pub enum FibexStringEncoding {
 
 impl From<&str> for FibexStringEncoding {
     fn from(name: &str) -> Self {
-        match name {
+        match name.to_uppercase().as_str() {
             "UTF-8" => FibexStringEncoding::UTF8,
             "UTF-16" => FibexStringEncoding::UTF16,
             "UCS-2" => FibexStringEncoding::UTF16, // a UTF-16 subset
@@ -2015,6 +2009,15 @@ mod reader {
                             reader, event, B_ID_REF,
                         )?));
                     }
+                    B_CODED_TYPE => {
+                        return Ok(FibexEvent::CodedType(
+                            get_attribute(reader, event, B_CODED_BASE_TYPE)?,
+                            get_attribute(reader, event, B_CODED_CATEGORY)?,
+                            get_attribute(reader, event, B_CODED_ENCODING)?,
+                            get_attribute(reader, event, B_CODED_BOM)?,
+                            get_attribute(reader, event, B_CODED_TERMINATION)?,
+                        ));
+                    }
                     _ => {}
                 },
                 XmlEvent::End(ref event) => match event.local_name() {
@@ -2867,6 +2870,10 @@ mod tests {
                 <ho:SHORT-NAME>AUint32</ho:SHORT-NAME>
                 <fx:CODING-REF ID-REF="/Coding_UINT32"/>
             </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_AUint64">
+                <ho:SHORT-NAME>AUint64</ho:SHORT-NAME>
+                <fx:CODING-REF ID-REF="/Coding_UINT64"/>
+            </fx:DATATYPE>
             <fx:PROCESSING-INFORMATION>
                 <fx:CODINGS>
                     <fx:CODING ID="/Coding_UINT16">
@@ -2878,6 +2885,10 @@ mod tests {
                             <ho:BIT-LENGTH>32</ho:BIT-LENGTH>
                         </ho:CODED-TYPE>
                     </fx:CODING>
+                    <fx:CODING ID="/Coding_UINT64">
+                        <ho:SHORT-NAME>AUint64Coding</ho:SHORT-NAME>
+                        <ho:CODED-TYPE ho:BASE-DATA-TYPE="A_UINT64" CATEGORY="STANDARD-LENGTH-TYPE"/>
+                    </fx:CODING>
                 </fx:CODINGS>
             </fx:PROCESSING-INFORMATION>
         "#;
@@ -2885,8 +2896,8 @@ mod tests {
         let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
         let model = FibexParser::parse(vec![reader]).expect("parse failed");
 
-        assert_eq!(2, model.types.len());
-        assert_eq!(2, model.codings.len());
+        assert_eq!(3, model.types.len());
+        assert_eq!(3, model.codings.len());
 
         let common_type = model.types.get(0).unwrap().borrow();
         assert_eq!(common_type.id, "/CommonDatatype_AUint16");
@@ -2902,6 +2913,14 @@ mod tests {
         assert_if!(
             &common_type.datatype,
             FibexDatatype::Primitive(FibexPrimitive::Uint32)
+        );
+
+        let common_type = model.types.get(2).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_AUint64");
+        assert_eq!(common_type.name, "AUint64");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint64)
         );
     }
 
