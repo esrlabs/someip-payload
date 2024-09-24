@@ -31,6 +31,12 @@
                     <ho:MIN-LENGTH>2</ho:MIN-LENGTH>
                 </ho:CODED-TYPE>
             </fx:CODING>
+            <fx:CODING ID="/Coding_UINT16BITS12">
+                <ho:SHORT-NAME>AUint16Bits12Coding</ho:SHORT-NAME>
+                <ho:CODED-TYPE ho:BASE-DATA-TYPE="A_UINT16" CATEGORY="STANDARD-LENGTH-TYPE">
+                    <ho:BIT-LENGTH>12</ho:BIT-LENGTH>
+                </ho:CODED-TYPE>
+            </fx:CODING>
         </fx:CODINGS>
     </fx:PROCESSING-INFORMATION>
 </fx:FIBEX>

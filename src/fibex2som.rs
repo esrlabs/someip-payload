@@ -74,6 +74,9 @@ mod builder {
                         type_decl.get_type_length_field_size(),
                     );
                 }
+                FibexDatatype::Complex(FibexComplex::Bitfield(members)) => {
+                    return get_bitfield_type(name, description, members);
+                }
                 FibexDatatype::Enum(datatype) => {
                     let endian = get_type_endian(type_decl.is_high_low_byte_order());
                     return get_enum_type(name, description, datatype, endian);
@@ -103,7 +106,7 @@ mod builder {
         let multidim = type_decl.is_multidim_array();
 
         if let Some(dimension) = type_decl.get_array_dimension(0) {
-            let mut type_decl = type_decl.downdim_array();
+            let mut type_decl = type_decl.reduce_array_dimension();
 
             if let Some(type_ref) = &type_decl.type_ref {
                 let type_def = type_ref.borrow();
@@ -729,6 +732,17 @@ mod builder {
         ))
     }
 
+    fn get_bitfield_type(
+        name: String,
+        description: String,
+        type_decls: &[FibexTypeDeclaration],
+    ) -> Option<Box<dyn SOMType>> {
+        Some(Box::new(
+            SOMBitfield::from(get_bitfield_type_items(type_decls))
+                .with_meta(SOMTypeMeta::from(name, description)),
+        ))
+    }
+
     fn get_complex_type_items(type_decls: &[FibexTypeDeclaration]) -> Vec<wrapper::SOMTypeWrapper> {
         let mut items = Vec::new();
 
@@ -809,6 +823,10 @@ mod builder {
                                     (*member_type).as_any().downcast_ref::<SOMUnion>()
                                 {
                                     items.push(wrapper::SOMTypeWrapper::Union(element.clone()));
+                                } else if let Some(element) =
+                                    (*member_type).as_any().downcast_ref::<SOMBitfield>()
+                                {
+                                    items.push(wrapper::SOMTypeWrapper::Bitfield(element.clone()));
                                 }
                             }
                             FibexDatatype::Enum(_) => {
@@ -1148,6 +1166,68 @@ mod builder {
             4 => SOMTypeField::U32,
             _ => SOMTypeField::U32,
         }
+    }
+
+    fn get_bitfield_type_items(type_decls: &[FibexTypeDeclaration]) -> Vec<SOMBitfieldMember> {
+        let mut items = Vec::new();
+
+        for type_decl in type_decls {
+            if type_decl.is_array() {
+                continue;
+            }
+
+            if let Some(bit_len) = type_decl.get_bit_length() {
+                if let Some(type_ref) = &type_decl.type_ref {
+                    let type_def = type_ref.borrow();
+
+                    let name = type_decl.name.clone();
+                    let description = type_def.name.clone();
+
+                    let datatype = match &type_def.datatype {
+                        FibexDatatype::Primitive(datatype) => datatype,
+                        FibexDatatype::Enum(datatype) => &datatype.primitive,
+                        _ => {
+                            continue;
+                        }
+                    };
+
+                    match datatype {
+                        FibexPrimitive::Uint8 => {
+                            items.push(SOMBitfieldMember::U8(SOMu8Bitfield::from(
+                                bit_len,
+                                SOMu8::empty().with_meta(SOMTypeMeta::from(name, description)),
+                            )));
+                        }
+                        FibexPrimitive::Uint16 => {
+                            items.push(SOMBitfieldMember::U16(SOMu16Bitfield::from(
+                                bit_len,
+                                SOMu16::empty(SOMEndian::Big)
+                                    .with_meta(SOMTypeMeta::from(name, description)),
+                            )));
+                        }
+                        FibexPrimitive::Uint32 => {
+                            items.push(SOMBitfieldMember::U32(SOMu32Bitfield::from(
+                                bit_len,
+                                SOMu32::empty(SOMEndian::Big)
+                                    .with_meta(SOMTypeMeta::from(name, description)),
+                            )));
+                        }
+                        FibexPrimitive::Uint64 => {
+                            items.push(SOMBitfieldMember::U64(SOMu64Bitfield::from(
+                                bit_len,
+                                SOMu64::empty(SOMEndian::Big)
+                                    .with_meta(SOMTypeMeta::from(name, description)),
+                            )));
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        items
     }
 }
 
@@ -1790,6 +1870,42 @@ mod tests {
                         <2> member2 (UINT16) : 1,
                     },
                 ],
+            }
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
+    }
+
+    #[test]
+    fn test_parse_bitfielde_event() {
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
+
+        let reader = FibexReader::from_file(file).unwrap();
+        let model = FibexParser::try_parse(vec![reader]).expect("fibex error");
+
+        let fibex_type = model
+            .get_service(123, 1)
+            .unwrap()
+            .get_method(32772)
+            .unwrap()
+            .get_request()
+            .unwrap();
+
+        let mut som_type = FibexTypes::build(fibex_type).expect("build error");
+
+        let payload = &[
+            0xA9, 0x5A, // U8<4>-Member|U16<12>-Member
+        ];
+
+        let mut parser = SOMParser::new(payload);
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                testBitfield (ABitfield) {
+                    member1 (UINT8) : 10<4>,
+                    member2 (AUint16Bits12) : 2394<12>,
+                },
             }
         "#;
 

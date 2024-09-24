@@ -258,6 +258,53 @@ mod optionals {
     }
 }
 
+mod bitfields {
+    use super::*;
+    use crate::som::bitfields::*;
+
+    impl Display for SOMBitfieldMemberType {
+        fn fmt(&self, f: &mut Formatter) -> FmtResult {
+            let (d, b) = match self {
+                SOMBitfieldMemberType::U8(item) => (item.value().to_string(), item.bit_len()),
+                SOMBitfieldMemberType::U16(item) => (item.value().to_string(), item.bit_len()),
+                SOMBitfieldMemberType::U32(item) => (item.value().to_string(), item.bit_len()),
+                SOMBitfieldMemberType::U64(item) => (item.value().to_string(), item.bit_len()),
+            };
+
+            write!(f, "{}<{}>", d, b)
+        }
+    }
+
+    impl Display for SOMBitfieldType {
+        fn fmt(&self, f: &mut Formatter) -> FmtResult {
+            let mut d = match self.meta() {
+                Some(meta) => meta.to_str(),
+                None => String::from("bitfield"),
+            };
+
+            let mut dd = String::from("");
+            for i in 0..self.len() {
+                if let Some(member) = self.get(i) {
+                    let ddd = format!("{}", member);
+                    dd = format!("{}\n\t{},", dd, ddd.replace('\n', "\n\t"));
+                }
+            }
+
+            if !dd.is_empty() {
+                if d.is_empty() {
+                    d = format!("{{{}\n}}", dd);
+                } else {
+                    d = format!("{} {{{}\n}}", d, dd);
+                }
+            } else if d.is_empty() {
+                d = String::from("{}");
+            }
+
+            write!(f, "{}", d.replace('\t', TAB_SPACES))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -631,6 +678,72 @@ mod tests {
 
         assert_eq!(
             "optional {\n\t<1> struct {\n\t\tbool : true,\n\t\tu16 : 49200,\n\t},\n}"
+                .replace('\t', TAB_SPACES),
+            format!("{}", obj)
+        );
+    }
+
+    #[test]
+    fn test_bitfields_output() {
+        let mut obj = SOMBitfield::from(vec![]);
+        assert_eq!("bitfield", format!("{}", obj));
+
+        obj = obj.with_meta(SOMTypeMeta::empty());
+        assert_eq!("{}", format!("{}", obj));
+
+        obj = obj.with_meta(SOMTypeMeta::from(String::from("name"), String::from("")));
+
+        assert_eq!("name", format!("{}", obj));
+
+        obj = SOMBitfield::from(vec![
+            SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::from(10u8))),
+            SOMBitfieldMember::U16(SOMu16Bitfield::from(
+                12,
+                SOMu16::from(SOMEndian::Big, 2394u16),
+            )),
+        ]);
+
+        assert_eq!(
+            "bitfield {\n\tu8 : 10<4>,\n\tu16 : 2394<12>,\n}".replace('\t', TAB_SPACES),
+            format!("{}", obj)
+        );
+
+        obj = obj.with_meta(SOMTypeMeta::empty());
+
+        assert_eq!(
+            "{\n\tu8 : 10<4>,\n\tu16 : 2394<12>,\n}".replace('\t', TAB_SPACES),
+            format!("{}", obj)
+        );
+
+        obj = obj.with_meta(SOMTypeMeta::from(
+            String::from("name"),
+            String::from("description"),
+        ));
+
+        assert_eq!(
+            "name (description) {\n\tu8 : 10<4>,\n\tu16 : 2394<12>,\n}".replace('\t', TAB_SPACES),
+            format!("{}", obj)
+        );
+
+        obj = SOMBitfield::from(vec![
+            SOMBitfieldMember::U8(SOMu8Bitfield::from(
+                4,
+                SOMu8::from(10u8)
+                    .with_meta(SOMTypeMeta::from(String::from("A"), String::from("Foo"))),
+            )),
+            SOMBitfieldMember::U16(SOMu16Bitfield::from(
+                12,
+                SOMu16::from(SOMEndian::Big, 2394u16)
+                    .with_meta(SOMTypeMeta::from(String::from("B"), String::from("Bar"))),
+            )),
+        ])
+        .with_meta(SOMTypeMeta::from(
+            String::from("name"),
+            String::from("description"),
+        ));
+
+        assert_eq!(
+            "name (description) {\n\tA (Foo) : 10<4>,\n\tB (Bar) : 2394<12>,\n}"
                 .replace('\t', TAB_SPACES),
             format!("{}", obj)
         );

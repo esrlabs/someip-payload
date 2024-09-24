@@ -566,6 +566,17 @@
                     <service:METHOD-IDENTIFIER>30</service:METHOD-IDENTIFIER>
                 </service:GETTER>
             </service:FIELD>
+            <service:FIELD ID="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestBitfield">
+                <ho:SHORT-NAME>TestBitfield</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/ComplexDatatype_ABitfield"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <service:ACCESS-PERMISSION>NOTIFY_NOTIFY_ONLY</service:ACCESS-PERMISSION>
+                <service:NOTIFIER>
+                    <service:NOTIFICATION-IDENTIFIER>32772</service:NOTIFICATION-IDENTIFIER>
+                </service:NOTIFIER>
+            </service:FIELD>
         </service:FIELDS>
         <service:EVENT-GROUPS>
             <service:EVENT-GROUP ID="/SOMEIP/TEST/ServiceInterface_TestService/EventGroup_AllEvents">
@@ -579,6 +590,7 @@
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestField"/>
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestFieldArray"/>
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_ServiceName"/>
+                    <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestBitfield"/>
                 </service:FIELD-REFS>
             </service:EVENT-GROUP>
         </service:EVENT-GROUPS>
@@ -709,6 +721,33 @@
                 </fx:MEMBER>
             </fx:MEMBERS>
         </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_ABitfield">
+            <ho:SHORT-NAME>ABitfield</ho:SHORT-NAME>
+            <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+            <fx:MEMBERS>
+                <fx:MEMBER ID="/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member1">
+                <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                <fx:UTILIZATION>
+                    <fx:BIT-LENGTH>4</fx:BIT-LENGTH>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>0</fx:POSITION>
+                </fx:MEMBER>
+                <fx:MEMBER ID="/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member2">
+                <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/CommonDatatype_AUint16Bits12"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <fx:POSITION>1</fx:POSITION>
+                </fx:MEMBER>
+            </fx:MEMBERS>
+        </fx:DATATYPE>
+        <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_AUint16Bits12">
+            <ho:SHORT-NAME>AUint16Bits12</ho:SHORT-NAME>
+            <fx:CODING-REF ID-REF="/Coding_UINT16BITS12"/>
+        </fx:DATATYPE>
     </fx:DATATYPES>
     </fx:ELEMENTS>
     <fx:PROCESSING-INFORMATION>
@@ -737,6 +776,12 @@
                     TERMINATION="ZERO"
                 >
                     <ho:MIN-LENGTH>2</ho:MIN-LENGTH>
+                </ho:CODED-TYPE>
+            </fx:CODING>
+            <fx:CODING ID="/Coding_UINT16BITS12">
+                <ho:SHORT-NAME>AUint16Bits12Coding</ho:SHORT-NAME>
+                <ho:CODED-TYPE ho:BASE-DATA-TYPE="A_UINT16" CATEGORY="STANDARD-LENGTH-TYPE">
+                    <ho:BIT-LENGTH>12</ho:BIT-LENGTH>
                 </ho:CODED-TYPE>
             </fx:CODING>
         </fx:CODINGS>
