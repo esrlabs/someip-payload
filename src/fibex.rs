@@ -44,8 +44,14 @@ pub struct FibexModel {
     /// The types of the model.
     pub types: Vec<FibexTypeReference>,
     /// The codings of the model.
-    pub codings: Vec<FibexTypeCoding>,
+    pub codings: Vec<FibexCodingReference>,
 }
+
+/// Represents a type reference.
+pub type FibexTypeReference = Rc<RefCell<FibexTypeInstance>>;
+
+/// Represents a coding reference.
+pub type FibexCodingReference = Rc<RefCell<FibexTypeCoding>>;
 
 impl FibexModel {
     /// Creates a new empty model.
@@ -68,60 +74,120 @@ impl FibexModel {
         })
     }
 
-    /// Resolves referenced types within the model or returns an error.
+    /// Resolves references within the model or returns an error.
     ///
     /// If strict is set to true, any unresolved reference will raise an error.
     /// If strict is set to false, all unresolved references will be ignored.
     pub fn pack(&mut self, strict: bool) -> Result<(), FibexError> {
-        let mut types: HashMap<String, FibexTypeReference> = HashMap::new();
+        let mut resolved_types: HashMap<String, FibexTypeReference> = HashMap::new();
+        let mut bitfield_types: Vec<FibexTypeReference> = Vec::new();
 
-        for item in &mut self.types {
-            let mut borrow = item.borrow_mut();
+        // Process types and codings.
+        for type_ref in &mut self.types {
+            let mut type_borrow = type_ref.borrow_mut();
 
-            if let Some(coding_ref) = borrow.coding_ref.as_ref() {
-                let coding_ref = coding_ref.clone();
+            if let Some(coding_id) = type_borrow.coding.as_ref() {
+                for coding_ref in &self.codings {
+                    let coding_borrow = coding_ref.borrow();
 
-                if let FibexDatatype::Unknown = &borrow.datatype {
-                    for coding in &self.codings {
-                        if *coding.id == *coding_ref {
-                            if let Some(datatype) = coding.resolve() {
-                                borrow.datatype = datatype;
+                    if coding_borrow.id == *coding_id {
+                        type_borrow.coding_ref = Some(coding_ref.clone());
+
+                        // Resolve coded types.
+                        if let FibexDatatype::Unknown = &type_borrow.datatype {
+                            if let Some(datatype) = coding_borrow.resolve() {
+                                type_borrow.datatype = datatype;
                             }
                         }
-                    }
-                }
-                if let FibexDatatype::Enum(enumeration) = &mut borrow.datatype {
-                    for coding in &self.codings {
-                        if *coding.id == *coding_ref {
-                            if let Some(FibexDatatype::Primitive(primitive)) = coding.resolve() {
+
+                        // Resolve enum types.
+                        if let FibexDatatype::Enum(enumeration) = &mut type_borrow.datatype {
+                            if let Some(FibexDatatype::Primitive(primitive)) =
+                                coding_borrow.resolve()
+                            {
                                 enumeration.primitive = primitive;
                             }
                         }
+
+                        break;
                     }
                 }
             }
 
-            if let FibexDatatype::Unknown = &borrow.datatype {
+            if let FibexDatatype::Unknown = &type_borrow.datatype {
                 warn!(
                     "{}",
-                    format!("Unknown type {} ({})", borrow.id, borrow.name)
+                    format!("Unknown type {} ({})", type_borrow.id, type_borrow.name)
                 );
             } else {
-                types.insert(borrow.id.clone(), item.clone());
+                resolved_types.insert(type_borrow.id.clone(), type_ref.clone());
             }
         }
 
-        for item in &mut self.types {
-            let mut borrow = item.borrow_mut();
+        // Process complex types.
+        for type_ref in &mut self.types {
+            let mut type_borrow = type_ref.borrow_mut();
 
+            // Resolve member types.
             let mut empty = vec![];
-            for declaration in match &mut borrow.datatype {
+            for declaration in match &mut type_borrow.datatype {
                 FibexDatatype::Complex(FibexComplex::Struct(members)) => members,
                 FibexDatatype::Complex(FibexComplex::Optional(members)) => members,
                 FibexDatatype::Complex(FibexComplex::Union(members)) => members,
                 _ => &mut empty,
             } {
-                Self::resolve_reference(&types, declaration, strict)?;
+                Self::resolve_reference(&resolved_types, declaration, strict)?;
+            }
+
+            // Resolve coding details.
+            if let FibexDatatype::Complex(FibexComplex::Struct(members)) = &mut type_borrow.datatype
+            {
+                let mut is_bitfield = !members.is_empty();
+
+                for member in members {
+                    let mut is_bitfield_member = false;
+
+                    if let Some(member_ref) = &member.type_ref {
+                        let member_borrow = member_ref.borrow();
+
+                        // Resolve bit-length.
+                        match &member_borrow.datatype {
+                            FibexDatatype::Primitive(_) | FibexDatatype::Enum(_) => {
+                                if let Some(coding_ref) = &member_borrow.coding_ref {
+                                    let coding_borrow = coding_ref.borrow();
+
+                                    if let Some(bit_len) = coding_borrow.bit_length() {
+                                        member
+                                            .attributes
+                                            .push(FibexTypeAttribute::BitLength(bit_len));
+                                    }
+                                }
+
+                                is_bitfield_member = member.get_bit_length().is_some();
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    if !is_bitfield_member {
+                        is_bitfield = false;
+                    }
+                }
+
+                if is_bitfield {
+                    bitfield_types.push(type_ref.clone());
+                }
+            }
+        }
+
+        // Apply bitfields.
+        for type_ref in &mut bitfield_types {
+            let mut type_borrow = type_ref.borrow_mut();
+
+            if let FibexDatatype::Complex(FibexComplex::Struct(members)) = &mut type_borrow.datatype
+            {
+                type_borrow.datatype =
+                    FibexDatatype::Complex(FibexComplex::Bitfield(members.to_vec()));
             }
         }
 
@@ -280,7 +346,7 @@ impl FibexTypeDeclaration {
     }
 
     /// Returns a copy of this declaration with the first array dimension removed.
-    pub fn downdim_array(&self) -> Self {
+    pub fn reduce_array_dimension(&self) -> Self {
         let mut declaration = self.clone();
 
         for attribute in &mut declaration.attributes {
@@ -439,9 +505,6 @@ impl FibexArrayDimension {
     }
 }
 
-/// Represents a type reference.
-pub type FibexTypeReference = Rc<RefCell<FibexTypeInstance>>;
-
 /// Represents a type instance.
 #[derive(Debug)]
 pub struct FibexTypeInstance {
@@ -451,8 +514,10 @@ pub struct FibexTypeInstance {
     pub name: String,
     /// The datatype of the item.
     pub datatype: FibexDatatype,
-    #[doc(hidden)]
-    coding_ref: Option<String>,
+    /// The id of the coding of the item, if any.
+    pub coding: Option<String>,
+    /// The optional referenced coding of the item.
+    pub coding_ref: Option<FibexCodingReference>,
 }
 
 /// Different kinds of datatypes.
@@ -533,6 +598,8 @@ pub enum FibexComplex {
     Optional(Vec<FibexTypeDeclaration>),
     /// Represents an union type.
     Union(Vec<FibexTypeDeclaration>),
+    /// Represents an bitfield type.
+    Bitfield(Vec<FibexTypeDeclaration>),
 }
 
 /// Represents an enum type.
@@ -572,7 +639,7 @@ pub struct FibexString {
     pub bit_length: Option<usize>,
 }
 
-/// Different kinds of encodings.
+/// Different kinds of string encodings.
 #[derive(Debug, PartialEq)]
 pub enum FibexStringEncoding {
     /// Represents an unknown encoding.
@@ -749,7 +816,7 @@ pub enum FibexCodingAttribute {
 pub struct FibexParser;
 
 impl FibexParser {
-    /// Returns a model parsend from the given sources or an error.
+    /// Returns a model parsed from the given sources or an error.
     ///
     /// Example
     /// ```
@@ -768,7 +835,7 @@ impl FibexParser {
         parser::parse_fibex(sources, true)
     }
 
-    /// Returns a model parsend from the given sources or an error,
+    /// Returns a model parsed from the given sources or an error,
     /// while ignoring unresolved type references.
     ///
     ///
@@ -980,6 +1047,7 @@ mod parser {
                             id: format!("{}/{}", id, parameter),
                             name: String::from(""),
                             datatype: FibexDatatype::Complex(FibexComplex::Struct(members)),
+                            coding: None,
                             coding_ref: None,
                         })),
                         Vec::new(),
@@ -1022,6 +1090,7 @@ mod parser {
                                 attributes: Vec::new(),
                             },
                         ])),
+                        coding: None,
                         coding_ref: None,
                     })));
                 }
@@ -1148,8 +1217,8 @@ mod parser {
     fn parse_processing_info<R: Read>(
         reader: &mut FibexReader<BufReader<R>>,
         id: &str,
-    ) -> Result<Vec<FibexTypeCoding>, FibexError> {
-        let mut codings: Vec<FibexTypeCoding> = Vec::new();
+    ) -> Result<Vec<FibexCodingReference>, FibexError> {
+        let mut codings: Vec<FibexCodingReference> = Vec::new();
 
         loop {
             match reader.read()? {
@@ -1168,7 +1237,7 @@ mod parser {
     fn parse_coding_info<R: Read>(
         reader: &mut FibexReader<BufReader<R>>,
         id: String,
-    ) -> Result<FibexTypeCoding, FibexError> {
+    ) -> Result<FibexCodingReference, FibexError> {
         let mut coding_name: Option<String> = None;
         let mut attributes = Vec::new();
 
@@ -1216,11 +1285,11 @@ mod parser {
                     }
                 }
                 FibexEvent::CodingInfoEnd => {
-                    return Ok(FibexTypeCoding {
+                    return Ok(Rc::new(RefCell::new(FibexTypeCoding {
                         id,
                         name: get_value(reader, coding_name)?,
                         attributes,
-                    });
+                    })));
                 }
                 FibexEvent::Eof => {
                     return Err(unexpected_eof(&id));
@@ -1256,7 +1325,8 @@ mod parser {
                         id,
                         name: first_to_upper(&get_value(reader, datatype_name)?),
                         datatype: datatype_type,
-                        coding_ref: datatype_coding,
+                        coding: datatype_coding,
+                        coding_ref: None,
                     });
                 }
                 FibexEvent::Eof => {
@@ -1294,14 +1364,7 @@ mod parser {
                         name: first_to_upper(&get_value(reader, datatype_name)?),
                         datatype: match datatype_class.as_deref() {
                             Some("STRUCTURE") | Some("TYPEDEF") => {
-                                let mut is_optional = !members.is_empty();
-                                for member in &members {
-                                    if member.get_data_id().is_none() {
-                                        is_optional = false;
-                                        break;
-                                    }
-                                }
-                                if is_optional {
+                                if !members.is_empty() && is_optional_type(&members) {
                                     FibexDatatype::Complex(FibexComplex::Optional(members))
                                 } else {
                                     FibexDatatype::Complex(FibexComplex::Struct(members))
@@ -1310,6 +1373,7 @@ mod parser {
                             Some("UNION") => FibexDatatype::Complex(FibexComplex::Union(members)),
                             _ => FibexDatatype::Unknown,
                         },
+                        coding: None,
                         coding_ref: None,
                     });
                 }
@@ -1319,6 +1383,16 @@ mod parser {
                 _ => {}
             }
         }
+    }
+
+    fn is_optional_type(members: &Vec<FibexTypeDeclaration>) -> bool {
+        for member in members {
+            if member.get_data_id().is_none() {
+                return false;
+            }
+        }
+
+        true
     }
 
     fn parse_datatype_member<R: Read>(
@@ -1393,7 +1467,8 @@ mod parser {
                             primitive: FibexPrimitive::Unknown,
                             elements,
                         }),
-                        coding_ref: Some(get_value(reader, enum_coding)?),
+                        coding: Some(get_value(reader, enum_coding)?),
+                        coding_ref: None,
                     });
                 }
                 FibexEvent::EnumStart => {
@@ -3650,6 +3725,125 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_bitfield() {
+        use stringreader::StringReader;
+
+        let xml = r#"
+            <fx:DATATYPE xsi:type="fx:COMPLEX-DATATYPE-TYPE" ID="/ComplexDatatype_ABitfield">
+                <ho:SHORT-NAME>ABitfield</ho:SHORT-NAME>
+                <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+                <fx:MEMBERS>
+                    <fx:MEMBER ID="/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member1">
+                    <ho:SHORT-NAME>Member1</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_UINT8"/>
+                    <fx:UTILIZATION>
+                        <fx:BIT-LENGTH>4</fx:BIT-LENGTH>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>0</fx:POSITION>
+                    </fx:MEMBER>
+                    <fx:MEMBER ID="/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member2">
+                    <ho:SHORT-NAME>Member2</ho:SHORT-NAME>
+                    <fx:DATATYPE-REF ID-REF="/CommonDatatype_AUint16Bits12"/>
+                    <fx:UTILIZATION>
+                        <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                    </fx:UTILIZATION>
+                    <fx:POSITION>1</fx:POSITION>
+                    </fx:MEMBER>
+                </fx:MEMBERS>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_UINT8">
+                <ho:SHORT-NAME>UINT8</ho:SHORT-NAME>
+            </fx:DATATYPE>
+            <fx:DATATYPE xsi:type="fx:COMMON-DATATYPE-TYPE" ID="/CommonDatatype_AUint16Bits12">
+                <ho:SHORT-NAME>AUint16Bits12</ho:SHORT-NAME>
+                <fx:CODING-REF ID-REF="/Coding_UINT16BITS12"/>
+            </fx:DATATYPE>
+            <fx:PROCESSING-INFORMATION>
+                <fx:CODINGS>
+                    <fx:CODING ID="/Coding_UINT16BITS12">
+                        <ho:SHORT-NAME>AUint16Bits12Coding</ho:SHORT-NAME>
+                        <ho:CODED-TYPE ho:BASE-DATA-TYPE="A_UINT16" CATEGORY="STANDARD-LENGTH-TYPE">
+                            <ho:BIT-LENGTH>12</ho:BIT-LENGTH>
+                        </ho:CODED-TYPE>
+                    </fx:CODING>
+                </fx:CODINGS>
+            </fx:PROCESSING-INFORMATION>
+        "#;
+
+        let reader = FibexReader::from_reader(BufReader::new(StringReader::new(xml))).unwrap();
+        let model = FibexParser::parse(vec![reader]).expect("parse failed");
+
+        assert_eq!(3, model.types.len());
+        assert_eq!(1, model.codings.len());
+
+        let common_type = model.types.get(1).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_UINT8");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint8)
+        );
+
+        let common_type = model.types.get(2).unwrap().borrow();
+        assert_eq!(common_type.id, "/CommonDatatype_AUint16Bits12");
+        assert_if!(
+            &common_type.datatype,
+            FibexDatatype::Primitive(FibexPrimitive::Uint16)
+        );
+
+        let complex_type = model.types.get(0).unwrap().borrow();
+        assert_eq!(complex_type.id, "/ComplexDatatype_ABitfield");
+        assert_eq!(complex_type.name, "ABitfield");
+
+        let members = match_if!(
+            &complex_type.datatype,
+            FibexDatatype::Complex(FibexComplex::Bitfield(members)),
+            members
+        );
+        assert_eq!(2, members.len());
+
+        // member 1
+        {
+            let member = members.get(0).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member1"
+            );
+            assert_eq!(member.name, "member1");
+            assert_eq!(member.id_ref, "/CommonDatatype_UINT8");
+            assert!(member.is_high_low_byte_order());
+            assert!(!member.is_array());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_UINT8");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint8)
+            );
+        }
+
+        // member 2
+        {
+            let member = members.get(1).unwrap();
+            assert_eq!(
+                member.id,
+                "/ComplexDatatype_ABitfield/ComplexDatatypeMember_Member2"
+            );
+            assert_eq!(member.name, "member2");
+            assert_eq!(member.id_ref, "/CommonDatatype_AUint16Bits12");
+            assert!(!member.is_high_low_byte_order());
+            assert!(!member.is_array());
+
+            let member_type = member.type_ref.as_ref().unwrap().borrow();
+            assert_eq!(member_type.id, "/CommonDatatype_AUint16Bits12");
+            assert_if!(
+                &member_type.datatype,
+                FibexDatatype::Primitive(FibexPrimitive::Uint16)
+            );
+        }
+    }
+
+    #[test]
     fn test_parse_single_fibex_file() {
         let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/single/model.xml");
 
@@ -3657,44 +3851,18 @@ mod tests {
         let model = FibexParser::try_parse(vec![reader]).expect("parse failed");
 
         assert_eq!(1, model.services.len());
-        assert_eq!(19, model.services.get(0).unwrap().methods.len());
-        assert_eq!(39, model.types.len());
-        assert_eq!(3, model.codings.len());
+        assert_eq!(20, model.services.get(0).unwrap().methods.len());
+        assert_eq!(42, model.types.len());
+        assert_eq!(4, model.codings.len());
 
-        let mut num_primitives = 0;
-        let mut num_structs = 0;
-        let mut num_optionals = 0;
-        let mut num_unions = 0;
-        let mut num_enums = 0;
-        let mut num_strings = 0;
-
-        for item in model.types {
-            if let FibexDatatype::Primitive(_) = item.borrow().datatype {
-                num_primitives += 1;
-            }
-            if let FibexDatatype::Complex(FibexComplex::Struct(_)) = item.borrow().datatype {
-                num_structs += 1;
-            }
-            if let FibexDatatype::Complex(FibexComplex::Optional(_)) = item.borrow().datatype {
-                num_optionals += 1;
-            }
-            if let FibexDatatype::Complex(FibexComplex::Union(_)) = item.borrow().datatype {
-                num_unions += 1;
-            }
-            if let FibexDatatype::Enum(_) = item.borrow().datatype {
-                num_enums += 1;
-            }
-            if let FibexDatatype::String(_) = item.borrow().datatype {
-                num_strings += 1;
-            }
-        }
-
-        assert_eq!(8, num_primitives);
-        assert_eq!(26, num_structs);
-        assert_eq!(1, num_optionals);
-        assert_eq!(1, num_unions);
-        assert_eq!(1, num_enums);
-        assert_eq!(2, num_strings);
+        let stats = TypeStats::from(&model);
+        assert_eq!(9, stats.primitives);
+        assert_eq!(27, stats.structs);
+        assert_eq!(1, stats.optionals);
+        assert_eq!(1, stats.unions);
+        assert_eq!(1, stats.bitfields);
+        assert_eq!(1, stats.enums);
+        assert_eq!(2, stats.strings);
     }
 
     #[test]
@@ -3713,43 +3881,60 @@ mod tests {
         let model = FibexParser::try_parse(sources).expect("parse failed");
 
         assert_eq!(1, model.services.len());
-        assert_eq!(19, model.services.get(0).unwrap().methods.len());
-        assert_eq!(39, model.types.len());
-        assert_eq!(3, model.codings.len());
+        assert_eq!(20, model.services.get(0).unwrap().methods.len());
+        assert_eq!(42, model.types.len());
+        assert_eq!(4, model.codings.len());
 
-        let mut num_primitives = 0;
-        let mut num_structs = 0;
-        let mut num_optionals = 0;
-        let mut num_unions = 0;
-        let mut num_enums = 0;
-        let mut num_strings = 0;
+        let stats = TypeStats::from(&model);
+        assert_eq!(9, stats.primitives);
+        assert_eq!(27, stats.structs);
+        assert_eq!(1, stats.optionals);
+        assert_eq!(1, stats.unions);
+        assert_eq!(1, stats.bitfields);
+        assert_eq!(1, stats.enums);
+        assert_eq!(2, stats.strings);
+    }
 
-        for item in model.types {
-            if let FibexDatatype::Primitive(_) = item.borrow().datatype {
-                num_primitives += 1;
+    #[derive(Default)]
+    struct TypeStats {
+        primitives: usize,
+        structs: usize,
+        optionals: usize,
+        unions: usize,
+        bitfields: usize,
+        enums: usize,
+        strings: usize,
+    }
+
+    impl TypeStats {
+        fn from(model: &FibexModel) -> Self {
+            let mut result = Self::default();
+
+            for item in model.types.iter().map(|t| t.borrow()) {
+                if let FibexDatatype::Primitive(_) = item.datatype {
+                    result.primitives += 1;
+                }
+                if let FibexDatatype::Complex(FibexComplex::Struct(_)) = item.datatype {
+                    result.structs += 1;
+                }
+                if let FibexDatatype::Complex(FibexComplex::Optional(_)) = item.datatype {
+                    result.optionals += 1;
+                }
+                if let FibexDatatype::Complex(FibexComplex::Union(_)) = item.datatype {
+                    result.unions += 1;
+                }
+                if let FibexDatatype::Complex(FibexComplex::Bitfield(_)) = item.datatype {
+                    result.bitfields += 1;
+                }
+                if let FibexDatatype::Enum(_) = item.datatype {
+                    result.enums += 1;
+                }
+                if let FibexDatatype::String(_) = item.datatype {
+                    result.strings += 1;
+                }
             }
-            if let FibexDatatype::Complex(FibexComplex::Struct(_)) = item.borrow().datatype {
-                num_structs += 1;
-            }
-            if let FibexDatatype::Complex(FibexComplex::Optional(_)) = item.borrow().datatype {
-                num_optionals += 1;
-            }
-            if let FibexDatatype::Complex(FibexComplex::Union(_)) = item.borrow().datatype {
-                num_unions += 1;
-            }
-            if let FibexDatatype::Enum(_) = item.borrow().datatype {
-                num_enums += 1;
-            }
-            if let FibexDatatype::String(_) = item.borrow().datatype {
-                num_strings += 1;
-            }
+
+            result
         }
-
-        assert_eq!(8, num_primitives);
-        assert_eq!(26, num_structs);
-        assert_eq!(1, num_optionals);
-        assert_eq!(1, num_unions);
-        assert_eq!(1, num_enums);
-        assert_eq!(2, num_strings);
     }
 }
