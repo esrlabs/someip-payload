@@ -204,24 +204,20 @@ impl FibexModel {
             if let Some(type_ref) = types.get(&declaration.id_ref) {
                 declaration.type_ref = Some(type_ref.clone());
             } else {
-                Self::unresolved_reference(&declaration.id_ref, &declaration.id, strict)?;
+                let message = format!(
+                    "Unresolved reference {} at {}",
+                    declaration.id_ref, declaration.id
+                );
+
+                if strict {
+                    return Err(FibexError::Parse(message));
+                } else {
+                    warn!("{}", message);
+                }
             }
         }
 
         Ok(())
-    }
-
-    #[doc(hidden)]
-    fn unresolved_reference(id_ref: &str, id: &str, strict: bool) -> Result<(), FibexError> {
-        let message = format!("Unresolved reference {} at {}", id_ref, id);
-
-        match strict {
-            true => Err(FibexError::Parse(message)),
-            false => {
-                warn!("{}", message);
-                Ok(())
-            }
-        }
     }
 }
 
@@ -837,7 +833,6 @@ impl FibexParser {
 
     /// Returns a model parsed from the given sources or an error,
     /// while ignoring unresolved type references.
-    ///
     ///
     /// Example
     /// ```

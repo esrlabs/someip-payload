@@ -1501,6 +1501,23 @@ mod tests {
         "#;
 
         assert_str(expected, &format!("{}", som_type));
+
+        let payload = &[
+            0x00, 0x2A, // invalid U16 Enum-Member
+        ];
+
+        let mut parser = SOMParser::new(payload).non_strict();
+        som_type.parse(&mut parser).expect("someip error");
+
+        let expected = r#"
+            {
+                input (AEnum) {
+                    '?' : 42
+                },
+            }
+        "#;
+
+        assert_str(expected, &format!("{}", som_type));
     }
 
     #[test]
