@@ -151,21 +151,20 @@ impl FibexModel {
                         let member_borrow = member_ref.borrow();
 
                         // Resolve bit-length.
-                        match &member_borrow.datatype {
-                            FibexDatatype::Primitive(_) | FibexDatatype::Enum(_) => {
-                                if let Some(coding_ref) = &member_borrow.coding_ref {
-                                    let coding_borrow = coding_ref.borrow();
+                        if let FibexDatatype::Primitive(_) | FibexDatatype::Enum(_) =
+                            &member_borrow.datatype
+                        {
+                            if let Some(coding_ref) = &member_borrow.coding_ref {
+                                let coding_borrow = coding_ref.borrow();
 
-                                    if let Some(bit_len) = coding_borrow.bit_length() {
-                                        member
-                                            .attributes
-                                            .push(FibexTypeAttribute::BitLength(bit_len));
-                                    }
+                                if let Some(bit_len) = coding_borrow.bit_length() {
+                                    member
+                                        .attributes
+                                        .push(FibexTypeAttribute::BitLength(bit_len));
                                 }
-
-                                is_bitfield_member = member.get_bit_length().is_some();
                             }
-                            _ => {}
+
+                            is_bitfield_member = member.get_bit_length().is_some();
                         }
                     }
 
@@ -204,24 +203,20 @@ impl FibexModel {
             if let Some(type_ref) = types.get(&declaration.id_ref) {
                 declaration.type_ref = Some(type_ref.clone());
             } else {
-                Self::unresolved_reference(&declaration.id_ref, &declaration.id, strict)?;
+                let message = format!(
+                    "Unresolved reference {} at {}",
+                    declaration.id_ref, declaration.id
+                );
+
+                if strict {
+                    return Err(FibexError::Parse(message));
+                } else {
+                    warn!("{}", message);
+                }
             }
         }
 
         Ok(())
-    }
-
-    #[doc(hidden)]
-    fn unresolved_reference(id_ref: &str, id: &str, strict: bool) -> Result<(), FibexError> {
-        let message = format!("Unresolved reference {} at {}", id_ref, id);
-
-        match strict {
-            true => Err(FibexError::Parse(message)),
-            false => {
-                warn!("{}", message);
-                Ok(())
-            }
-        }
     }
 }
 
@@ -837,7 +832,6 @@ impl FibexParser {
 
     /// Returns a model parsed from the given sources or an error,
     /// while ignoring unresolved type references.
-    ///
     ///
     /// Example
     /// ```

@@ -164,6 +164,8 @@ mod enums {
             if self.len() > 0 {
                 if let Some(value) = &self.get() {
                     dd = format!("\n\t{}", value);
+                } else if let Some(value) = &self.get_invalid() {
+                    dd = format!("\n\t'?' : {}", value);
                 } else {
                     dd = String::from("\n\t'?'");
                 }
