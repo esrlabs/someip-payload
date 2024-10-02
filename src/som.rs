@@ -447,6 +447,11 @@ impl<'a> SOMSerializer<'a> {
 
 /// Parser for SOME/IP types.
 ///
+/// In the default strict-mode the parser will raise any parsing error.
+/// In non-strict mode the following errors will be ignored:
+/// - Unexpected enum value that does not match configuration.
+/// - Undersized max-length in dynamic arrays or strings
+///
 /// Example
 /// ```
 /// # use someip_payload::som::*;
@@ -462,12 +467,29 @@ pub struct SOMParser<'a> {
     buffer: &'a [u8],
     #[doc(hidden)]
     offset: usize,
+    #[doc(hidden)]
+    strict: bool,
 }
 
 impl<'a> SOMParser<'a> {
-    /// Creates a new parser for the given buffer.
+    /// Creates a new parser for the given buffer in strict mode.
     pub fn new(buffer: &'a [u8]) -> Self {
-        SOMParser { buffer, offset: 0 }
+        SOMParser {
+            buffer,
+            offset: 0,
+            strict: true,
+        }
+    }
+
+    /// Sets the parser to non-strict mode.
+    pub fn non_strict(mut self) -> Self {
+        self.strict = false;
+        self
+    }
+
+    /// Answers if the parser is in strict mode.
+    pub(crate) fn is_strict(&self) -> bool {
+        self.strict
     }
 }
 
@@ -1506,7 +1528,7 @@ pub(crate) mod arrays {
         }
 
         #[doc(hidden)]
-        fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
             if (length < self.min) || (length > self.max) {
@@ -1523,7 +1545,7 @@ pub(crate) mod arrays {
     impl<T: SOMType + Any + Clone> SOMType for SOMArrayType<T> {
         fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
             let offset = serializer.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let type_lengthfield = serializer.promise(self.lengthfield.size())?;
 
@@ -1553,8 +1575,11 @@ pub(crate) mod arrays {
             self.clear();
             if self.is_dynamic() {
                 let type_start = parser.offset();
-
+                let max = self.max;
                 while (parser.offset() - type_start) < type_lengthfield {
+                    if !parser.is_strict() && self.max <= self.len() {
+                        self.max = self.len() + 1usize
+                    }
                     if let Some(element) = self.get_mut(self.len()) {
                         element.parse(parser)?;
                     } else {
@@ -1564,6 +1589,7 @@ pub(crate) mod arrays {
                         )));
                     }
                 }
+                self.max = max;
             } else {
                 for _ in 0..self.max {
                     if let Some(element) = self.get_mut(self.len()) {
@@ -1585,7 +1611,9 @@ pub(crate) mod arrays {
                 )));
             }
 
-            self.validate(offset)?;
+            if parser.is_strict() || !self.is_dynamic() {
+                self.validate_length(offset)?;
+            }
             Ok(size)
         }
 
@@ -2119,15 +2147,18 @@ pub(crate) mod enums {
         elements: Vec<SOMEnumTypeItem<T>>,
         /// The index of the currently selected member.
         index: usize,
+        /// An optional invalid value, if set.
+        invalid: Option<T>,
     }
 
-    impl<T: Copy + PartialEq> SOMEnumType<T> {
+    impl<T: Display + Copy + PartialEq> SOMEnumType<T> {
         /// Creates a new enum from the given elements.
         pub fn from(elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumType {
                 meta: None,
                 elements,
                 index: 0,
+                invalid: None,
             }
         }
 
@@ -2141,29 +2172,6 @@ pub(crate) mod enums {
             self.index != 0
         }
 
-        /// Returns the currently selected element's value, if any.
-        pub fn get_value(&self) -> Option<T> {
-            if let Some(element) = self.get() {
-                return Some(element.value);
-            }
-
-            None
-        }
-
-        /// Selects the element with the given key and returns true if successfully.
-        pub fn set(&mut self, key: String) -> bool {
-            let mut index: usize = 0;
-            for element in &self.elements {
-                index += 1;
-                if element.key == key {
-                    self.index = index;
-                    return true;
-                }
-            }
-
-            false
-        }
-
         /// Returns the currently selected element, if any.
         pub(crate) fn get(&self) -> Option<&SOMEnumTypeItem<T>> {
             if self.has_value() {
@@ -2173,23 +2181,76 @@ pub(crate) mod enums {
             }
         }
 
-        /// Clears the currently selected element.
-        pub fn clear(&mut self) {
-            self.index = 0;
+        /// Returns the currently selected element's value, if any.
+        pub fn get_value(&self) -> Option<T> {
+            if let Some(element) = self.get() {
+                return Some(element.value);
+            }
+
+            None
         }
 
-        #[doc(hidden)]
-        fn apply(&mut self, value: T) -> bool {
+        /// Returns the currently set invalid value, if any.
+        pub(crate) fn get_invalid(&self) -> Option<T> {
+            self.invalid
+        }
+
+        /// Selects the element with the given key and returns true if successfully.
+        pub fn set(&mut self, key: String) -> bool {
             let mut index: usize = 0;
             for element in &self.elements {
                 index += 1;
-                if element.value == value {
+                if element.key == key {
                     self.index = index;
+                    self.invalid = None;
                     return true;
                 }
             }
 
             false
+        }
+
+        /// Selects the element with the given value and returns true if successfully.
+        pub(crate) fn set_value(&mut self, value: T) -> bool {
+            let mut index: usize = 0;
+            for element in &self.elements {
+                index += 1;
+                if element.value == value {
+                    self.index = index;
+                    self.invalid = None;
+                    return true;
+                }
+            }
+
+            false
+        }
+
+        /// Sets an invalid value.
+        pub(crate) fn set_invalid(&mut self, value: T) {
+            self.index = 0;
+            self.invalid = Some(value);
+        }
+
+        /// Clears the currently selected element.
+        pub fn clear(&mut self) {
+            self.index = 0;
+            self.invalid = None;
+        }
+
+        #[doc(hidden)]
+        fn parsed(&mut self, value: T, offset: usize, strict: bool) -> Result<(), SOMTypeError> {
+            if !self.set_value(value) {
+                if strict {
+                    return Err(SOMTypeError::InvalidPayload(format!(
+                        "Invalid Enum value {} at offset {}",
+                        value, offset
+                    )));
+                } else {
+                    self.set_invalid(value);
+                }
+            }
+
+            Ok(())
         }
     }
 
@@ -2215,7 +2276,7 @@ pub(crate) mod enums {
         endian: SOMEndian,
     }
 
-    impl<T: Copy + PartialEq> SOMEnumTypeWithEndian<T> {
+    impl<T: Display + Copy + PartialEq> SOMEnumTypeWithEndian<T> {
         /// Creates a new enum from the given elements.
         pub fn from(endian: SOMEndian, elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumTypeWithEndian {
@@ -2293,12 +2354,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2345,12 +2401,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2397,12 +2448,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2449,12 +2495,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2804,7 +2845,7 @@ pub(crate) mod strings {
         }
 
         #[doc(hidden)]
-        fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
             let valid: bool = if self.is_dynamic() {
@@ -2827,7 +2868,7 @@ pub(crate) mod strings {
     impl SOMType for SOMStringType {
         fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
             let offset = serializer.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let type_lengthfield = serializer.promise(self.lengthfield.size())?;
 
@@ -2964,7 +3005,9 @@ pub(crate) mod strings {
                 )));
             }
 
-            self.validate(offset)?;
+            if parser.is_strict() || !self.is_dynamic() {
+                self.validate_length(offset)?;
+            }
             Ok(size)
         }
 
@@ -3577,7 +3620,7 @@ pub(crate) mod bitfields {
         }
 
         #[doc(hidden)]
-        fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
             let bit_len: usize = self.bit_len();
 
             if bit_len % 8 != 0 {
@@ -3594,7 +3637,7 @@ pub(crate) mod bitfields {
     impl SOMType for SOMBitfieldType {
         fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
             let offset = serializer.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let mut dest = BitVec::new(self.size() * 8);
             let mut dest_offset: usize = 0;
@@ -3646,7 +3689,7 @@ pub(crate) mod bitfields {
 
         fn parse(&mut self, parser: &mut SOMParser) -> Result<usize, SOMTypeError> {
             let offset = parser.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let mut buffer = vec![0; self.size()];
             parser.read_buffer(&mut buffer)?;
@@ -3882,6 +3925,13 @@ mod tests {
 
     fn parse<T: SOMType>(obj2: &mut T, data: &[u8]) {
         let mut parser = SOMParser::new(data);
+        let size = data.len();
+        assert_eq!(size, obj2.parse(&mut parser).unwrap());
+        assert_eq!(size, obj2.size());
+    }
+
+    fn parse_non_strict<T: SOMType>(obj2: &mut T, data: &[u8]) {
+        let mut parser = SOMParser::new(data).non_strict();
         let size = data.len();
         assert_eq!(size, obj2.parse(&mut parser).unwrap());
         assert_eq!(size, obj2.size());
@@ -4942,6 +4992,31 @@ mod tests {
 
             obj1.clear();
             assert_eq!(0, obj1.len());
+
+            let mut obj3 = SOMu8Array::dynamic(
+                SOMLengthField::U8,
+                SOMu8::empty(),
+                1,
+                0, // invalid max-length
+            );
+
+            parse_non_strict(
+                &mut obj3,
+                &[
+                    0x03, // Length-Field (U8)
+                    0x01, // Array-Member (U8)
+                    0x02, // Array-Member (U8)
+                    0x03, // Array-Member (U8)
+                ],
+            );
+
+            assert_eq!(0, obj3.max());
+            assert_eq!(1, obj3.min());
+            assert_eq!(3, obj3.len());
+
+            for i in 0..obj3.len() {
+                assert_eq!((i + 1) as u8, obj3.get(i).unwrap().get().unwrap());
+            }
         }
 
         // partial array
@@ -5341,6 +5416,28 @@ mod tests {
             );
             assert_eq!(16045704242864831166u64, obj2.get_value().unwrap());
         }
+
+        // invalid enum
+        {
+            let mut obj = SOMu8Enum::from(vec![SOMu8EnumItem::from(String::from("A"), 23u8)]);
+            assert_eq!(1, obj.len());
+            assert!(!obj.has_value());
+            assert!(obj.get_invalid().is_none());
+
+            parse_non_strict(
+                &mut obj,
+                &[
+                    0x2A, // invalid U8-Value
+                ],
+            );
+
+            assert!(!obj.has_value());
+            if let Some(value) = obj.get_invalid() {
+                assert_eq!(42, value);
+            } else {
+                panic!();
+            }
+        }
     }
 
     #[test]
@@ -5527,7 +5624,7 @@ mod tests {
             assert_eq!(1 + 1, obj1.len());
         }
 
-        // partial fixed utf16-le string with termination only
+        // fixed utf16-le partial string with termination only
         {
             let mut obj1 = SOMString::fixed(
                 SOMStringEncoding::Utf16Le,
@@ -5682,7 +5779,7 @@ mod tests {
             assert_eq!(1 + 1, obj1.len());
         }
 
-        // partial dynamic utf16-le string with bom only
+        // dynamic utf16-le partial string with bom only
         {
             let mut obj1 = SOMString::dynamic(
                 SOMLengthField::U32,
@@ -5718,7 +5815,7 @@ mod tests {
             assert_eq!(1, obj1.len());
         }
 
-        // incomplete length
+        // invalid length
         {
             let mut obj1 = SOMString::fixed(SOMStringEncoding::Utf8, SOMStringFormat::Plain, 3);
 
@@ -5749,6 +5846,27 @@ mod tests {
             assert_eq!(1 + 1, obj2.size());
 
             serialize_fail(&obj2, &mut [0u8; 2], "Invalid String length 1 at offset 0");
+
+            let mut obj3 = SOMString::dynamic(
+                SOMLengthField::U8,
+                SOMStringEncoding::Utf8,
+                SOMStringFormat::Plain,
+                2,
+                0, // invalid max-length
+            );
+            assert_eq!(0, obj3.len());
+            assert_eq!(1, obj3.size());
+
+            parse_non_strict(
+                &mut obj3,
+                &[
+                    0x03, 0x66, 0x6F, 0x6F, // Content
+                ],
+            );
+
+            assert_eq!(String::from("foo"), obj3.get());
+            assert_eq!(3, obj3.len());
+            assert_eq!(1 + 3, obj3.size());
         }
     }
 
