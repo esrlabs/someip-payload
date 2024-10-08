@@ -252,6 +252,16 @@ impl<'a> SOMSerializer<'a> {
         Ok(())
     }
 
+    fn write_buffer(&mut self, buffer: &[u8]) -> Result<(), SOMTypeError> {
+        let size = buffer.len();
+        self.check_size(size)?;
+
+        self.buffer[self.offset..(self.offset + size)].copy_from_slice(buffer);
+
+        self.offset += size;
+        Ok(())
+    }
+
     fn write_bool(&mut self, value: bool) -> Result<(), SOMTypeError> {
         let size = std::mem::size_of::<bool>();
         self.check_size(size)?;
@@ -437,6 +447,11 @@ impl<'a> SOMSerializer<'a> {
 
 /// Parser for SOME/IP types.
 ///
+/// In the default strict-mode the parser will raise any parsing error.
+/// In non-strict mode the following errors will be ignored:
+/// - Unexpected enum value that does not match configuration.
+/// - Undersized max-length in dynamic arrays or strings
+///
 /// Example
 /// ```
 /// # use someip_payload::som::*;
@@ -452,12 +467,29 @@ pub struct SOMParser<'a> {
     buffer: &'a [u8],
     #[doc(hidden)]
     offset: usize,
+    #[doc(hidden)]
+    strict: bool,
 }
 
 impl<'a> SOMParser<'a> {
-    /// Creates a new parser for the given buffer.
+    /// Creates a new parser for the given buffer in strict mode.
     pub fn new(buffer: &'a [u8]) -> Self {
-        SOMParser { buffer, offset: 0 }
+        SOMParser {
+            buffer,
+            offset: 0,
+            strict: true,
+        }
+    }
+
+    /// Sets the parser to non-strict mode.
+    pub fn non_strict(mut self) -> Self {
+        self.strict = false;
+        self
+    }
+
+    /// Answers if the parser is in strict mode.
+    pub(crate) fn is_strict(&self) -> bool {
+        self.strict
     }
 }
 
@@ -498,6 +530,16 @@ impl<'a> SOMParser<'a> {
         };
 
         Ok(result)
+    }
+
+    fn read_buffer(&mut self, buffer: &mut [u8]) -> Result<(), SOMTypeError> {
+        let size = buffer.len();
+        self.check_size(size)?;
+
+        buffer.copy_from_slice(&self.buffer[self.offset..(self.offset + size)]);
+
+        self.offset += size;
+        Ok(())
     }
 
     fn read_bool(&mut self) -> Result<bool, SOMTypeError> {
@@ -1486,7 +1528,7 @@ pub(crate) mod arrays {
         }
 
         #[doc(hidden)]
-        fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
             if (length < self.min) || (length > self.max) {
@@ -1503,7 +1545,7 @@ pub(crate) mod arrays {
     impl<T: SOMType + Any + Clone> SOMType for SOMArrayType<T> {
         fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
             let offset = serializer.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let type_lengthfield = serializer.promise(self.lengthfield.size())?;
 
@@ -1533,8 +1575,11 @@ pub(crate) mod arrays {
             self.clear();
             if self.is_dynamic() {
                 let type_start = parser.offset();
-
+                let max = self.max;
                 while (parser.offset() - type_start) < type_lengthfield {
+                    if !parser.is_strict() && self.max <= self.len() {
+                        self.max = self.len() + 1usize
+                    }
                     if let Some(element) = self.get_mut(self.len()) {
                         element.parse(parser)?;
                     } else {
@@ -1544,6 +1589,7 @@ pub(crate) mod arrays {
                         )));
                     }
                 }
+                self.max = max;
             } else {
                 for _ in 0..self.max {
                     if let Some(element) = self.get_mut(self.len()) {
@@ -1565,7 +1611,9 @@ pub(crate) mod arrays {
                 )));
             }
 
-            self.validate(offset)?;
+            if parser.is_strict() || !self.is_dynamic() {
+                self.validate_length(offset)?;
+            }
             Ok(size)
         }
 
@@ -2099,15 +2147,18 @@ pub(crate) mod enums {
         elements: Vec<SOMEnumTypeItem<T>>,
         /// The index of the currently selected member.
         index: usize,
+        /// An optional invalid value, if set.
+        invalid: Option<T>,
     }
 
-    impl<T: Copy + PartialEq> SOMEnumType<T> {
+    impl<T: Display + Copy + PartialEq> SOMEnumType<T> {
         /// Creates a new enum from the given elements.
         pub fn from(elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumType {
                 meta: None,
                 elements,
                 index: 0,
+                invalid: None,
             }
         }
 
@@ -2121,29 +2172,6 @@ pub(crate) mod enums {
             self.index != 0
         }
 
-        /// Returns the currently selected element's value, if any.
-        pub fn get_value(&self) -> Option<T> {
-            if let Some(element) = self.get() {
-                return Some(element.value);
-            }
-
-            None
-        }
-
-        /// Selects the element with the given key and returns true if successfully.
-        pub fn set(&mut self, key: String) -> bool {
-            let mut index: usize = 0;
-            for element in &self.elements {
-                index += 1;
-                if element.key == key {
-                    self.index = index;
-                    return true;
-                }
-            }
-
-            false
-        }
-
         /// Returns the currently selected element, if any.
         pub(crate) fn get(&self) -> Option<&SOMEnumTypeItem<T>> {
             if self.has_value() {
@@ -2153,23 +2181,76 @@ pub(crate) mod enums {
             }
         }
 
-        /// Clears the currently selected element.
-        pub fn clear(&mut self) {
-            self.index = 0;
+        /// Returns the currently selected element's value, if any.
+        pub fn get_value(&self) -> Option<T> {
+            if let Some(element) = self.get() {
+                return Some(element.value);
+            }
+
+            None
         }
 
-        #[doc(hidden)]
-        fn apply(&mut self, value: T) -> bool {
+        /// Returns the currently set invalid value, if any.
+        pub(crate) fn get_invalid(&self) -> Option<T> {
+            self.invalid
+        }
+
+        /// Selects the element with the given key and returns true if successfully.
+        pub fn set(&mut self, key: String) -> bool {
             let mut index: usize = 0;
             for element in &self.elements {
                 index += 1;
-                if element.value == value {
+                if element.key == key {
                     self.index = index;
+                    self.invalid = None;
                     return true;
                 }
             }
 
             false
+        }
+
+        /// Selects the element with the given value and returns true if successfully.
+        pub(crate) fn set_value(&mut self, value: T) -> bool {
+            let mut index: usize = 0;
+            for element in &self.elements {
+                index += 1;
+                if element.value == value {
+                    self.index = index;
+                    self.invalid = None;
+                    return true;
+                }
+            }
+
+            false
+        }
+
+        /// Sets an invalid value.
+        pub(crate) fn set_invalid(&mut self, value: T) {
+            self.index = 0;
+            self.invalid = Some(value);
+        }
+
+        /// Clears the currently selected element.
+        pub fn clear(&mut self) {
+            self.index = 0;
+            self.invalid = None;
+        }
+
+        #[doc(hidden)]
+        fn parsed(&mut self, value: T, offset: usize, strict: bool) -> Result<(), SOMTypeError> {
+            if !self.set_value(value) {
+                if strict {
+                    return Err(SOMTypeError::InvalidPayload(format!(
+                        "Invalid Enum value {} at offset {}",
+                        value, offset
+                    )));
+                } else {
+                    self.set_invalid(value);
+                }
+            }
+
+            Ok(())
         }
     }
 
@@ -2195,7 +2276,7 @@ pub(crate) mod enums {
         endian: SOMEndian,
     }
 
-    impl<T: Copy + PartialEq> SOMEnumTypeWithEndian<T> {
+    impl<T: Display + Copy + PartialEq> SOMEnumTypeWithEndian<T> {
         /// Creates a new enum from the given elements.
         pub fn from(endian: SOMEndian, elements: Vec<SOMEnumTypeItem<T>>) -> Self {
             SOMEnumTypeWithEndian {
@@ -2273,12 +2354,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2325,12 +2401,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2377,12 +2448,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2429,12 +2495,7 @@ pub(crate) mod enums {
             temp.parse(parser)?;
 
             if let Some(value) = temp.get() {
-                if !self.enumeration.apply(value) {
-                    return Err(SOMTypeError::InvalidPayload(format!(
-                        "Invalid Enum value {} at offset {}",
-                        value, offset
-                    )));
-                }
+                self.enumeration.parsed(value, offset, parser.is_strict())?;
             } else {
                 return Err(SOMTypeError::InvalidType(format!(
                     "Uninitialized Type at offset {}",
@@ -2784,7 +2845,7 @@ pub(crate) mod strings {
         }
 
         #[doc(hidden)]
-        fn validate(&self, offset: usize) -> Result<(), SOMTypeError> {
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
             let length: usize = self.len();
 
             let valid: bool = if self.is_dynamic() {
@@ -2807,7 +2868,7 @@ pub(crate) mod strings {
     impl SOMType for SOMStringType {
         fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
             let offset = serializer.offset();
-            self.validate(offset)?;
+            self.validate_length(offset)?;
 
             let type_lengthfield = serializer.promise(self.lengthfield.size())?;
 
@@ -2944,7 +3005,9 @@ pub(crate) mod strings {
                 )));
             }
 
-            self.validate(offset)?;
+            if parser.is_strict() || !self.is_dynamic() {
+                self.validate_length(offset)?;
+            }
             Ok(size)
         }
 
@@ -3373,6 +3436,378 @@ pub type SOMOptionalMember = wrapper::SOMTypeWrapper;
 /// ```
 pub type SOMOptional = optionals::SOMOptionalType<SOMOptionalMember>;
 
+/// Contains the bitfield types.
+pub(crate) mod bitfields {
+    use super::*;
+
+    /// Represents a vector of bits.
+    pub(crate) struct BitVec {
+        /// Stores the bits.
+        bits: Vec<bool>,
+    }
+
+    impl BitVec {
+        /// Creates a new bit-vec with given length of bits.
+        pub(crate) fn new(len: usize) -> Self {
+            BitVec {
+                bits: vec![false; len],
+            }
+        }
+
+        /// Creates a new bit-vec from given bytes-slice.
+        pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+            let mut bits: Vec<bool> = Vec::with_capacity(bytes.len() * 8);
+
+            for byte in bytes {
+                bits.append(&mut vec![
+                    (byte >> 7 & 1) != 0,
+                    (byte >> 6 & 1) != 0,
+                    (byte >> 5 & 1) != 0,
+                    (byte >> 4 & 1) != 0,
+                    (byte >> 3 & 1) != 0,
+                    (byte >> 2 & 1) != 0,
+                    (byte >> 1 & 1) != 0,
+                    (*byte & 1) != 0,
+                ]);
+            }
+
+            BitVec { bits }
+        }
+
+        /// Returns a new byte-vector from this bit-vec.
+        pub(crate) fn as_bytes(&self) -> Vec<u8> {
+            let mut bytes: Vec<u8> = Vec::with_capacity(self.bits.len() / 8);
+
+            for i in (0..self.bits.len()).step_by(8) {
+                bytes.push(
+                    (*self.bits.get(i).unwrap_or(&false) as u8) << 7
+                        | (*self.bits.get(i + 1).unwrap_or(&false) as u8) << 6
+                        | (*self.bits.get(i + 2).unwrap_or(&false) as u8) << 5
+                        | (*self.bits.get(i + 3).unwrap_or(&false) as u8) << 4
+                        | (*self.bits.get(i + 4).unwrap_or(&false) as u8) << 3
+                        | (*self.bits.get(i + 5).unwrap_or(&false) as u8) << 2
+                        | (*self.bits.get(i + 6).unwrap_or(&false) as u8) << 1
+                        | *self.bits.get(i + 7).unwrap_or(&false) as u8,
+                );
+            }
+
+            bytes
+        }
+
+        /// Copies some bits from src to dest with given offsets.
+        pub(crate) fn copy(
+            src: &BitVec,
+            src_offset: usize,
+            dest: &mut BitVec,
+            dest_offset: usize,
+            bit_len: usize,
+        ) {
+            for i in 0..bit_len {
+                if let Some(dest_bit) = dest.bits.get_mut(dest_offset + i) {
+                    if let Some(src_bit) = src.bits.get(src_offset + i) {
+                        *dest_bit = *src_bit;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Possible bitfield member types.
+    #[derive(Debug, Clone)]
+    pub enum SOMBitfieldMemberType {
+        /// An U8 bitfield member type
+        U8(SOMBitfieldItem<SOMu8>),
+        /// An U16 bitfield member type
+        U16(SOMBitfieldItem<SOMu16>),
+        /// An U32 bitfield member type
+        U32(SOMBitfieldItem<SOMu32>),
+        /// An U64 bitfield member type
+        U64(SOMBitfieldItem<SOMu64>),
+    }
+
+    impl SOMBitfieldMemberType {
+        /// Returns the bit-length.
+        pub fn bit_len(&self) -> usize {
+            match self {
+                SOMBitfieldMemberType::U8(item) => item.bits,
+                SOMBitfieldMemberType::U16(item) => item.bits,
+                SOMBitfieldMemberType::U32(item) => item.bits,
+                SOMBitfieldMemberType::U64(item) => item.bits,
+            }
+        }
+    }
+
+    /// A bitfield member type.
+    #[derive(Debug, Clone)]
+    pub struct SOMBitfieldItem<T: SOMType> {
+        /// The bit-length of the member.
+        bits: usize,
+        /// The underlying value of the member.
+        value: T,
+    }
+
+    impl<T: SOMType> SOMBitfieldItem<T> {
+        /// Creates a new members from the given bit-length and value.
+        pub fn from(bits: usize, value: T) -> Self {
+            SOMBitfieldItem {
+                bits: std::cmp::min(bits, value.size() * 8),
+                value,
+            }
+        }
+
+        /// Returns the members's bit-length.
+        pub fn bit_len(&self) -> usize {
+            self.bits
+        }
+
+        /// Returns the members's value.
+        pub fn value(&self) -> &T {
+            &self.value
+        }
+
+        /// Returns the members's mutable value.
+        pub fn mut_value(&mut self) -> &mut T {
+            &mut self.value
+        }
+    }
+
+    /// A bitfield type.
+    #[derive(Debug, Clone)]
+    pub struct SOMBitfieldType {
+        /// Optional metadata of the type.
+        meta: Option<SOMTypeMeta>,
+        /// The members of the type.
+        members: Vec<SOMBitfieldMemberType>,
+    }
+
+    impl SOMBitfieldType {
+        /// Creates a new bitfield from the given members.
+        pub fn from(members: Vec<SOMBitfieldMemberType>) -> Self {
+            SOMBitfieldType {
+                meta: None,
+                members,
+            }
+        }
+
+        /// Returns the number of members.
+        pub fn len(&self) -> usize {
+            self.members.len()
+        }
+
+        /// Returns the total bit-length.
+        pub fn bit_len(&self) -> usize {
+            let mut bits: usize = 0;
+
+            for member in &self.members {
+                bits += member.bit_len();
+            }
+
+            bits
+        }
+
+        /// Returns the members at given index, if any.
+        ///
+        /// Note: The index of the member shall be zero-based.
+        pub fn get(&self, index: usize) -> Option<&SOMBitfieldMemberType> {
+            self.members.get(index)
+        }
+
+        /// Returns the mutable members at given index, if any.
+        ///
+        /// Note: The index of the member shall be zero-based.
+        pub fn get_mut(&mut self, index: usize) -> Option<&mut SOMBitfieldMemberType> {
+            self.members.get_mut(index)
+        }
+
+        #[doc(hidden)]
+        fn validate_length(&self, offset: usize) -> Result<(), SOMTypeError> {
+            let bit_len: usize = self.bit_len();
+
+            if bit_len % 8 != 0 {
+                return Err(SOMTypeError::InvalidType(format!(
+                    "Invalid Bitfield length {} at offset {}",
+                    bit_len, offset
+                )));
+            }
+
+            Ok(())
+        }
+    }
+
+    impl SOMType for SOMBitfieldType {
+        fn serialize(&self, serializer: &mut SOMSerializer) -> Result<usize, SOMTypeError> {
+            let offset = serializer.offset();
+            self.validate_length(offset)?;
+
+            let mut dest = BitVec::new(self.size() * 8);
+            let mut dest_offset: usize = 0;
+
+            for member in &self.members {
+                let (src, src_offset, bit_len) = match member {
+                    SOMBitfieldMemberType::U8(item) => {
+                        let value = item.value();
+                        let mut buf = vec![0; value.size()];
+                        let mut ser = SOMSerializer::new(&mut buf);
+                        value.serialize(&mut ser)?;
+                        let bit_len = item.bit_len();
+                        (BitVec::from_bytes(&buf), 8 - bit_len, bit_len)
+                    }
+                    SOMBitfieldMemberType::U16(item) => {
+                        let value = item.value();
+                        let mut buf = vec![0; value.size()];
+                        let mut ser = SOMSerializer::new(&mut buf);
+                        value.serialize(&mut ser)?;
+                        let bit_len = item.bit_len();
+                        (BitVec::from_bytes(&buf), 16 - bit_len, bit_len)
+                    }
+                    SOMBitfieldMemberType::U32(item) => {
+                        let value = item.value();
+                        let mut buf = vec![0; value.size()];
+                        let mut ser = SOMSerializer::new(&mut buf);
+                        value.serialize(&mut ser)?;
+                        let bit_len = item.bit_len();
+                        (BitVec::from_bytes(&buf), 32 - bit_len, bit_len)
+                    }
+                    SOMBitfieldMemberType::U64(item) => {
+                        let value = item.value();
+                        let mut buf = vec![0; value.size()];
+                        let mut ser = SOMSerializer::new(&mut buf);
+                        value.serialize(&mut ser)?;
+                        let bit_len = item.bit_len();
+                        (BitVec::from_bytes(&buf), 64 - bit_len, bit_len)
+                    }
+                };
+
+                BitVec::copy(&src, src_offset, &mut dest, dest_offset, bit_len);
+                dest_offset += bit_len;
+            }
+
+            serializer.write_buffer(dest.as_bytes().as_slice())?;
+
+            Ok(serializer.offset() - offset)
+        }
+
+        fn parse(&mut self, parser: &mut SOMParser) -> Result<usize, SOMTypeError> {
+            let offset = parser.offset();
+            self.validate_length(offset)?;
+
+            let mut buffer = vec![0; self.size()];
+            parser.read_buffer(&mut buffer)?;
+
+            let src = BitVec::from_bytes(&buffer);
+            let mut src_offset: usize = 0;
+
+            for member in &mut self.members {
+                let bit_len = match member {
+                    SOMBitfieldMemberType::U8(item) => {
+                        let bit_len = item.bit_len();
+                        let mut dest = BitVec::new(8);
+                        BitVec::copy(&src, src_offset, &mut dest, 8 - bit_len, bit_len);
+                        let buf = dest.as_bytes();
+                        let mut pars = SOMParser::new(buf.as_slice());
+                        let value = item.mut_value();
+                        value.parse(&mut pars)?;
+                        bit_len
+                    }
+                    SOMBitfieldMemberType::U16(item) => {
+                        let bit_len = item.bit_len();
+                        let mut dest = BitVec::new(16);
+                        BitVec::copy(&src, src_offset, &mut dest, 16 - bit_len, bit_len);
+                        let buf = dest.as_bytes();
+                        let mut pars = SOMParser::new(buf.as_slice());
+                        let value = item.mut_value();
+                        value.parse(&mut pars)?;
+                        bit_len
+                    }
+                    SOMBitfieldMemberType::U32(item) => {
+                        let bit_len = item.bit_len();
+                        let mut dest = BitVec::new(32);
+                        BitVec::copy(&src, src_offset, &mut dest, 32 - bit_len, bit_len);
+                        let buf = dest.as_bytes();
+                        let mut pars = SOMParser::new(buf.as_slice());
+                        let value = item.mut_value();
+                        value.parse(&mut pars)?;
+                        bit_len
+                    }
+                    SOMBitfieldMemberType::U64(item) => {
+                        let bit_len = item.bit_len();
+                        let mut dest = BitVec::new(64);
+                        BitVec::copy(&src, src_offset, &mut dest, 64 - bit_len, bit_len);
+                        let buf = dest.as_bytes();
+                        let mut pars = SOMParser::new(buf.as_slice());
+                        let value = item.mut_value();
+                        value.parse(&mut pars)?;
+                        bit_len
+                    }
+                };
+                src_offset += bit_len;
+            }
+
+            Ok(parser.offset() - offset)
+        }
+
+        fn size(&self) -> usize {
+            self.bit_len() / 8
+        }
+
+        fn category(&self) -> SOMTypeCategory {
+            SOMTypeCategory::ImplicitLength
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl SOMTypeWithMeta for SOMBitfieldType {
+        fn with_meta(mut self, meta: SOMTypeMeta) -> Self {
+            self.meta = Some(meta);
+            self
+        }
+
+        fn meta(&self) -> Option<&SOMTypeMeta> {
+            self.meta.as_ref()
+        }
+    }
+}
+
+/// Type for a u8 bitfield member.
+///
+/// See also [SOMBitfield]
+pub type SOMu8Bitfield = bitfields::SOMBitfieldItem<SOMu8>;
+
+/// Type for a u16 bitfield member.
+///
+/// See also [SOMBitfield]
+pub type SOMu16Bitfield = bitfields::SOMBitfieldItem<SOMu16>;
+
+/// Type for a u32 bitfield member.
+///
+/// See also [SOMBitfield]
+pub type SOMu32Bitfield = bitfields::SOMBitfieldItem<SOMu32>;
+
+/// Type for a u64 bitfield member.
+///
+/// See also [SOMBitfield]
+pub type SOMu64Bitfield = bitfields::SOMBitfieldItem<SOMu64>;
+
+/// Wrapper for a bitfield member.
+///
+/// See also [SOMBitfield]
+pub type SOMBitfieldMember = bitfields::SOMBitfieldMemberType;
+
+/// Type for a bitfield.
+///
+/// Example
+/// ```
+/// # use someip_payload::som::*;
+/// let obj = SOMBitfield::from(vec![
+///     SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::from(10u8))),
+///     SOMBitfieldMember::U16(SOMu16Bitfield::from(12, SOMu16::from(SOMEndian::Big, 2394u16))),
+/// ]);
+/// ```
+pub type SOMBitfield = bitfields::SOMBitfieldType;
+
 /// Contains the type wrappers.
 pub(crate) mod wrapper {
     use super::*;
@@ -3465,6 +3900,7 @@ pub(crate) mod wrapper {
         Union(SOMUnion),
         String(SOMString),
         Optional(SOMOptional),
+        Bitfield(SOMBitfield),
     ]);
 }
 
@@ -3489,6 +3925,13 @@ mod tests {
 
     fn parse<T: SOMType>(obj2: &mut T, data: &[u8]) {
         let mut parser = SOMParser::new(data);
+        let size = data.len();
+        assert_eq!(size, obj2.parse(&mut parser).unwrap());
+        assert_eq!(size, obj2.size());
+    }
+
+    fn parse_non_strict<T: SOMType>(obj2: &mut T, data: &[u8]) {
+        let mut parser = SOMParser::new(data).non_strict();
         let size = data.len();
         assert_eq!(size, obj2.parse(&mut parser).unwrap());
         assert_eq!(size, obj2.size());
@@ -4148,7 +4591,7 @@ mod tests {
             }
         }
 
-        //  struct with union
+        // struct with union
         {
             let mut obj1 = SOMStruct::from(vec![SOMStructMember::Union(SOMUnion::from(
                 SOMTypeField::U8,
@@ -4206,7 +4649,7 @@ mod tests {
             );
         }
 
-        //  struct with enum
+        // struct with enum
         {
             let mut obj1 = SOMStruct::from(vec![SOMStructMember::EnumU16(SOMu16Enum::from(
                 SOMEndian::Little,
@@ -4374,6 +4817,63 @@ mod tests {
             }
         }
 
+        // struct with bitfield
+        {
+            let mut obj1 =
+                SOMStruct::from(vec![SOMStructMember::Bitfield(SOMBitfield::from(vec![
+                    SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                    SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                ]))]);
+            assert_eq!(1, obj1.len());
+
+            if let Some(SOMStructMember::Bitfield(sub)) = obj1.get_mut(0) {
+                if let Some(SOMBitfieldMember::U8(subsub)) = sub.get_mut(0) {
+                    subsub.mut_value().set(10u8);
+                } else {
+                    panic!();
+                }
+                if let Some(SOMBitfieldMember::U8(subsub)) = sub.get_mut(1) {
+                    subsub.mut_value().set(11u8);
+                } else {
+                    panic!();
+                }
+            } else {
+                panic!();
+            }
+
+            let mut obj2 =
+                SOMStruct::from(vec![SOMStructMember::Bitfield(SOMBitfield::from(vec![
+                    SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                    SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                ]))]);
+            assert_eq!(1, obj2.len());
+
+            serialize_parse(
+                &obj1,
+                &mut obj2,
+                &[
+                    0xAB, // U8<4>-Member|U8<4>-Member
+                ],
+            );
+            assert_eq!(1, obj2.len());
+
+            if let Some(SOMStructMember::Bitfield(sub)) = obj2.get(0) {
+                assert_eq!(2, sub.len());
+                if let Some(SOMBitfieldMember::U8(subsub)) = sub.get(0) {
+                    assert_eq!(10u8, subsub.value().get().unwrap());
+                } else {
+                    panic!();
+                }
+                if let Some(SOMBitfieldMember::U8(subsub)) = sub.get(1) {
+                    assert_eq!(11u8, subsub.value().get().unwrap());
+                } else {
+                    panic!();
+                }
+            } else {
+                panic!();
+            }
+        }
+
         // invalid member
         {
             let mut obj = SOMStruct::from(vec![SOMStructMember::Bool(SOMBool::empty())]);
@@ -4492,6 +4992,31 @@ mod tests {
 
             obj1.clear();
             assert_eq!(0, obj1.len());
+
+            let mut obj3 = SOMu8Array::dynamic(
+                SOMLengthField::U8,
+                SOMu8::empty(),
+                1,
+                0, // invalid max-length
+            );
+
+            parse_non_strict(
+                &mut obj3,
+                &[
+                    0x03, // Length-Field (U8)
+                    0x01, // Array-Member (U8)
+                    0x02, // Array-Member (U8)
+                    0x03, // Array-Member (U8)
+                ],
+            );
+
+            assert_eq!(0, obj3.max());
+            assert_eq!(1, obj3.min());
+            assert_eq!(3, obj3.len());
+
+            for i in 0..obj3.len() {
+                assert_eq!((i + 1) as u8, obj3.get(i).unwrap().get().unwrap());
+            }
         }
 
         // partial array
@@ -4891,6 +5416,28 @@ mod tests {
             );
             assert_eq!(16045704242864831166u64, obj2.get_value().unwrap());
         }
+
+        // invalid enum
+        {
+            let mut obj = SOMu8Enum::from(vec![SOMu8EnumItem::from(String::from("A"), 23u8)]);
+            assert_eq!(1, obj.len());
+            assert!(!obj.has_value());
+            assert!(obj.get_invalid().is_none());
+
+            parse_non_strict(
+                &mut obj,
+                &[
+                    0x2A, // invalid U8-Value
+                ],
+            );
+
+            assert!(!obj.has_value());
+            if let Some(value) = obj.get_invalid() {
+                assert_eq!(42, value);
+            } else {
+                panic!();
+            }
+        }
     }
 
     #[test]
@@ -5077,7 +5624,7 @@ mod tests {
             assert_eq!(1 + 1, obj1.len());
         }
 
-        // partial fixed utf16-le string with termination only
+        // fixed utf16-le partial string with termination only
         {
             let mut obj1 = SOMString::fixed(
                 SOMStringEncoding::Utf16Le,
@@ -5232,7 +5779,7 @@ mod tests {
             assert_eq!(1 + 1, obj1.len());
         }
 
-        // partial dynamic utf16-le string with bom only
+        // dynamic utf16-le partial string with bom only
         {
             let mut obj1 = SOMString::dynamic(
                 SOMLengthField::U32,
@@ -5268,7 +5815,7 @@ mod tests {
             assert_eq!(1, obj1.len());
         }
 
-        // incomplete length
+        // invalid length
         {
             let mut obj1 = SOMString::fixed(SOMStringEncoding::Utf8, SOMStringFormat::Plain, 3);
 
@@ -5299,6 +5846,27 @@ mod tests {
             assert_eq!(1 + 1, obj2.size());
 
             serialize_fail(&obj2, &mut [0u8; 2], "Invalid String length 1 at offset 0");
+
+            let mut obj3 = SOMString::dynamic(
+                SOMLengthField::U8,
+                SOMStringEncoding::Utf8,
+                SOMStringFormat::Plain,
+                2,
+                0, // invalid max-length
+            );
+            assert_eq!(0, obj3.len());
+            assert_eq!(1, obj3.size());
+
+            parse_non_strict(
+                &mut obj3,
+                &[
+                    0x03, 0x66, 0x6F, 0x6F, // Content
+                ],
+            );
+
+            assert_eq!(String::from("foo"), obj3.get());
+            assert_eq!(3, obj3.len());
+            assert_eq!(1 + 3, obj3.size());
         }
     }
 
@@ -5545,6 +6113,167 @@ mod tests {
                     0x01, // Bool-Member
                 ],
                 "Uninitialized required member 2 at offset 0",
+            );
+        }
+    }
+
+    #[test]
+    fn test_bitfield_bitvec() {
+        use crate::som::bitfields::BitVec;
+
+        let bytes = [0xAB, 0xCD];
+        let bitvec = BitVec::from_bytes(&bytes);
+        assert_eq!(bytes, bitvec.as_bytes().as_slice());
+
+        let mut bitvec = BitVec::new(16);
+        BitVec::copy(&BitVec::from_bytes(&[0x0A]), 4, &mut bitvec, 0, 4);
+        BitVec::copy(&BitVec::from_bytes(&[0x0B, 0xCD]), 4, &mut bitvec, 4, 12);
+        assert_eq!(&[0xAB, 0xCD], bitvec.as_bytes().as_slice());
+    }
+
+    #[test]
+    fn test_som_bitfield() {
+        // empty bitfield
+        {
+            let obj1 = SOMBitfield::from(vec![]);
+            assert_eq!(0, obj1.len());
+            assert_eq!(0, obj1.bit_len());
+            assert_eq!(0, obj1.size());
+
+            let mut obj2 = SOMBitfield::from(vec![]);
+            serialize_parse(&obj1, &mut obj2, &[]);
+            assert_eq!(0, obj2.len());
+            assert_eq!(0, obj2.bit_len());
+            assert_eq!(0, obj1.size());
+        }
+
+        // simple bitfield
+        {
+            let obj1 = SOMBitfield::from(vec![
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::from(10u8))),
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::from(11u8))),
+            ]);
+            assert_eq!(2, obj1.len());
+            assert_eq!(8, obj1.bit_len());
+            assert_eq!(1, obj1.size());
+
+            let mut obj2 = SOMBitfield::from(vec![
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+            ]);
+            assert_eq!(2, obj2.len());
+            assert_eq!(8, obj2.bit_len());
+            assert_eq!(1, obj2.size());
+
+            serialize_parse(
+                &obj1,
+                &mut obj2,
+                &[
+                    0xAB, // U8<4>-Member|U8<4>-Member
+                ],
+            );
+            assert_eq!(2, obj2.len());
+
+            if let Some(SOMBitfieldMember::U8(sub)) = obj2.get(0) {
+                assert_eq!(10u8, sub.value().get().unwrap());
+            } else {
+                panic!();
+            }
+
+            if let Some(SOMBitfieldMember::U8(sub)) = obj2.get(1) {
+                assert_eq!(11u8, sub.value().get().unwrap());
+            } else {
+                panic!();
+            }
+        }
+
+        // complex bitfield
+        {
+            let obj1 = SOMBitfield::from(vec![
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::from(10u8))),
+                SOMBitfieldMember::U16(SOMu16Bitfield::from(
+                    12,
+                    SOMu16::from(SOMEndian::Big, 2394u16),
+                )),
+            ]);
+            assert_eq!(2, obj1.len());
+            assert_eq!(16, obj1.bit_len());
+            assert_eq!(2, obj1.size());
+
+            let mut obj2 = SOMBitfield::from(vec![
+                SOMBitfieldMember::U8(SOMu8Bitfield::from(4, SOMu8::empty())),
+                SOMBitfieldMember::U16(SOMu16Bitfield::from(12, SOMu16::empty(SOMEndian::Big))),
+            ]);
+            assert_eq!(2, obj2.len());
+            assert_eq!(16, obj2.bit_len());
+            assert_eq!(2, obj2.size());
+
+            serialize_parse(
+                &obj1,
+                &mut obj2,
+                &[
+                    0xA9, 0x5A, // U8<4>-Member|U16<12>-Member
+                ],
+            );
+            assert_eq!(2, obj2.len());
+
+            if let Some(SOMBitfieldMember::U8(sub)) = obj2.get(0) {
+                assert_eq!(10u8, sub.value().get().unwrap());
+            } else {
+                panic!();
+            }
+
+            if let Some(SOMBitfieldMember::U16(sub)) = obj2.get(1) {
+                assert_eq!(2394u16, sub.value().get().unwrap());
+            } else {
+                panic!();
+            }
+
+            serialize_fail(
+                &obj1,
+                &mut [0u8; 1],
+                "Serializer exhausted at offset 0 for Object size 2",
+            );
+            parse_fail(
+                &mut obj2,
+                &[0u8; 1],
+                "Parser exhausted at offset 0 for Object size 2",
+            );
+        }
+
+        // invalid bit-length
+        {
+            assert_eq!(8, SOMu8Bitfield::from(9, SOMu8::empty()).bit_len());
+            assert_eq!(
+                16,
+                SOMu16Bitfield::from(17, SOMu16::empty(SOMEndian::Big)).bit_len()
+            );
+            assert_eq!(
+                32,
+                SOMu32Bitfield::from(33, SOMu32::empty(SOMEndian::Big)).bit_len()
+            );
+            assert_eq!(
+                64,
+                SOMu64Bitfield::from(65, SOMu64::empty(SOMEndian::Big)).bit_len()
+            );
+
+            let mut obj1 = SOMBitfield::from(vec![SOMBitfieldMember::U8(SOMu8Bitfield::from(
+                7,
+                SOMu8::empty(),
+            ))]);
+            assert_eq!(1, obj1.len());
+            assert_eq!(7, obj1.bit_len());
+
+            serialize_fail(
+                &obj1,
+                &mut [0u8; 1],
+                "Invalid Bitfield length 7 at offset 0",
+            );
+
+            parse_fail(
+                &mut obj1,
+                &mut [0u8; 1],
+                "Invalid Bitfield length 7 at offset 0",
             );
         }
     }

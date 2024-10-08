@@ -557,6 +557,17 @@
                     <service:METHOD-IDENTIFIER>30</service:METHOD-IDENTIFIER>
                 </service:GETTER>
             </service:FIELD>
+            <service:FIELD ID="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestBitfield">
+                <ho:SHORT-NAME>TestBitfield</ho:SHORT-NAME>
+                <fx:DATATYPE-REF ID-REF="/ComplexDatatype_ABitfield"/>
+                <fx:UTILIZATION>
+                    <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+                </fx:UTILIZATION>
+                <service:ACCESS-PERMISSION>NOTIFY_NOTIFY_ONLY</service:ACCESS-PERMISSION>
+                <service:NOTIFIER>
+                    <service:NOTIFICATION-IDENTIFIER>32772</service:NOTIFICATION-IDENTIFIER>
+                </service:NOTIFIER>
+            </service:FIELD>
         </service:FIELDS>
         <service:EVENT-GROUPS>
             <service:EVENT-GROUP ID="/SOMEIP/TEST/ServiceInterface_TestService/EventGroup_AllEvents">
@@ -570,6 +581,7 @@
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestField"/>
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestFieldArray"/>
                     <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_ServiceName"/>
+                    <service:FIELD-REF ID-REF="/SOMEIP/TEST/ServiceInterface_TestService/Field_TestBitfield"/>
                 </service:FIELD-REFS>
             </service:EVENT-GROUP>
         </service:EVENT-GROUPS>
